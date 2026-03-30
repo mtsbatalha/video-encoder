@@ -1,0 +1,66 @@
+{
+  "app_name": "Fabrica de Conversão NVENC Pro v2.0",
+  "version": "2.0.0",
+  "ffmpeg": {
+    "path": null,
+    "ffprobe_path": null,
+    "timeout_seconds": 3600,
+    "hw_monitoring": true,
+    "hw_monitoring_interval": 1
+  },
+  "directories": {
+    "watch_folders": [
+      {
+        "nome": "Exemplo",
+        "entrada": "C:/Caminho/De/Entrada",
+        "saida": "C:/Caminho/De/Saida",
+        "profile": "template_profile"
+      }
+    ],
+    "profiles": "profiles",
+    "jobs": "jobs",
+    "logs": "logs",
+    "stats": "stats"
+  },
+  "encoding": {
+    "max_concurrent": 2,
+    "priority": "normal",
+    "auto_cleanup": true,
+    "disk_space_min_gb": 10,
+    "retry_attempts": 2,
+    "retry_delay_seconds": 30
+  },
+  "monitoring": {
+    "gpu_enabled": true,
+    "cpu_enabled": true,
+    "disk_enabled": true,
+    "temperature_warning": 85,
+    "gpu_memory_warning_percent": 90
+  },
+  "notifications": {
+    "enabled": false,
+    "email": {
+      "smtp_server": "smtp.example.com",
+      "smtp_port": 587,
+      "from_email": "user@example.com",
+      "to_email": "admin@example.com",
+      "password": "SUA_SENHA_AQUI"
+    },
+    "webhook": {
+      "url": "https://webhook.example.com",
+      "method": "POST"
+    }
+  },
+  "ui": {
+    "theme": "default",
+    "show_progress_bar": true,
+    "show_resource_monitor": true,
+    "language": "pt-BR"
+  },
+  "logging": {
+    "level": "INFO",
+    "file_rotation_mb": 10,
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}
