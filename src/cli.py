@@ -607,9 +607,14 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
     valid, error = validate_video_file(input_path)
     if not valid:
         menu.print_error(error)
+        input("\nPressione Enter para continuar...")
         return
     
     profiles = profile_mgr.list_profiles()
+    if not profiles:
+        menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
+        input("\nPressione Enter para continuar...")
+        return
     profile_idx = menu.show_options([p['name'] for p in profiles], "Perfis disponíveis")
     profile = profiles[profile_idx]
     
@@ -630,7 +635,7 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
     console.print(f"  Output: {output_path}")
     console.print(f"  Perfil: {profile['name']}")
     
-    time.sleep(2)
+    input("\nPressione Enter para continuar...")
 
 
 def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager):
@@ -642,9 +647,14 @@ def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
     valid, error = validate_directory_exists(folder_path)
     if not valid:
         menu.print_error(error)
+        input("\nPressione Enter para continuar...")
         return
     
     profiles = profile_mgr.list_profiles()
+    if not profiles:
+        menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
+        input("\nPressione Enter para continuar...")
+        return
     profile_idx = menu.show_options([p['name'] for p in profiles], "Perfis disponíveis")
     profile = profiles[profile_idx]
     
@@ -671,6 +681,7 @@ def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
         )
     
     menu.print_success(f"{len(video_files)} job(s) adicionados à fila")
+    input("\nPressione Enter para continuar...")
 
 
 def run_profile_manager_cli(menu: Menu, profile_mgr: ProfileManager):
