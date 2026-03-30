@@ -846,7 +846,7 @@ def main():
         run_interactive_mode(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         return
     
-    parser.print_help()
+    run_interactive_mode(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
 
 
 if __name__ == '__main__':
