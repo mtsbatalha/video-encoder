@@ -9,9 +9,15 @@ class FFmpegWrapper:
     """Wrapper para comandos FFmpeg com suporte a NVENC."""
     
     CODEC_MAP = {
-        'hevc_nvenc': {'codec': 'hevc_nvenc', 'pix_fmt': 'yuv420p10le', 'profile': 'main10'},
-        'h264_nvenc': {'codec': 'h264_nvenc', 'pix_fmt': 'yuv420p', 'profile': 'high'},
-        'av1_nvenc': {'codec': 'av1_nvenc', 'pix_fmt': 'yuv420p10le', 'profile': 'main'}
+        'hevc_nvenc': {'codec': 'hevc_nvenc', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-cq'},
+        'h264_nvenc': {'codec': 'h264_nvenc', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-cq'},
+        'av1_nvenc': {'codec': 'av1_nvenc', 'pix_fmt': 'yuv420p10le', 'profile': 'main', 'cq_param': '-cq'},
+        'hevc_amf': {'codec': 'hevc_amf', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-qp_i'},
+        'h264_amf': {'codec': 'h264_amf', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-qp_i'},
+        'hevc_qsv': {'codec': 'hevc_qsv', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-q'},
+        'h264_qsv': {'codec': 'h264_qsv', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-q'},
+        'libx265': {'codec': 'libx265', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-crf'},
+        'libx264': {'codec': 'libx264', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-crf'}
     }
     
     def __init__(self, ffmpeg_path: Optional[str] = None, ffprobe_path: Optional[str] = None):
@@ -57,6 +63,42 @@ class FFmpegWrapper:
             return codecs
         except Exception:
             return []
+    
+    def get_all_video_codecs(self) -> List[str]:
+        """Retorna todos os codecs de vídeo disponíveis."""
+        try:
+            result = subprocess.run(
+                [self.ffmpeg, '-encoders'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            codecs = []
+            target_codecs = ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc', 'hevc_amf', 'h264_amf', 
+                           'hevc_qsv', 'h264_qsv', 'libx265', 'libx264']
+            for line in result.stdout.split('\n'):
+                for codec in target_codecs:
+                    if codec in line.lower():
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            codecs.append(parts[1])
+                        break
+            return codecs
+        except Exception:
+            return []
+    
+    def is_codec_available(self, codec: str) -> bool:
+        """Verifica se codec específico está disponível."""
+        try:
+            result = subprocess.run(
+                [self.ffmpeg, '-encoders'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            return codec.lower() in result.stdout.lower()
+        except Exception:
+            return False
     
     def get_media_info(self, input_path: str) -> Dict[str, Any]:
         """Obtém informações detalhadas do arquivo de mídia."""
@@ -150,24 +192,32 @@ class FFmpegWrapper:
         if filter_complex:
             cmd.extend(['-vf', ','.join(filter_complex)])
         
-        if codec == 'av1_nvenc':
-            cmd.extend(['-c:v', 'av1_nvenc'])
-        elif codec == 'hevc_nvenc':
-            cmd.extend(['-c:v', 'hevc_nvenc'])
-        else:
-            cmd.extend(['-c:v', 'h264_nvenc'])
+        cmd.extend(['-c:v', video_params['codec']])
         
-        cmd.extend(['-preset', preset])
+        if codec in ['hevc_amf', 'h264_amf']:
+            preset_map = {'quality': 'quality', 'balanced': 'balanced', 'speed': 'speed'}
+            amf_preset = preset_map.get(preset, 'balanced')
+            cmd.extend(['-preset', amf_preset])
+        elif codec in ['hevc_qsv', 'h264_qsv']:
+            qsv_preset = preset if preset in ['fast', 'faster', 'fastest', 'slow', 'slower', 'slowest'] else 'balanced'
+            cmd.extend(['-preset', qsv_preset])
+        elif codec in ['libx265', 'libx264']:
+            cpu_preset = preset if preset in ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'] else 'medium'
+            cmd.extend(['-preset', cpu_preset])
+        else:
+            cmd.extend(['-preset', preset])
         
         if two_pass and codec in ['h264_nvenc', 'hevc_nvenc']:
             cmd.extend(['-rc', 'twopass'])
         elif cq:
-            cmd.extend(['-cq', cq])
+            cq_param = video_params.get('cq_param', '-cq')
+            cmd.extend([cq_param, cq])
         elif bitrate:
             cmd.extend(['-b:v', bitrate])
         
-        cmd.extend(['-pix_fmt', video_params['pix_fmt']])
-        cmd.extend(['-profile:v', video_params['profile']])
+        if codec not in ['libx265', 'libx264']:
+            cmd.extend(['-pix_fmt', video_params['pix_fmt']])
+            cmd.extend(['-profile:v', video_params['profile']])
         
         if plex_compatible:
             cmd.extend(['-tag:v', 'hvc1' if 'hevc' in codec or 'av1' in codec else 'avc1'])

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from datetime import datetime
+from ..core.hw_detector import HardwareDetector, HardwareCapabilities
 
 
 class ProfileManager:
@@ -378,3 +379,74 @@ class ProfileManager:
         """Reseta perfis para padrões."""
         self._profiles = self.DEFAULT_PROFILES.copy()
         return self.save()
+    
+    def get_profiles_by_hardware_category(self, category: str) -> List[Dict[str, Any]]:
+        """Filtra perfis por categoria de hardware."""
+        return [
+            {"id": pid, **data}
+            for pid, data in self._profiles.items()
+            if not pid.startswith('_') and isinstance(data, dict) 
+            and data.get('hardware_category') == category
+        ]
+    
+    def get_profiles_for_codec(self, codec: str) -> List[Dict[str, Any]]:
+        """Filtra perfis por codec."""
+        return [
+            {"id": pid, **data}
+            for pid, data in self._profiles.items()
+            if not pid.startswith('_') and isinstance(data, dict) 
+            and data.get('codec') == codec
+        ]
+    
+    def get_recommended_profiles(self, hardware_detector: HardwareDetector, content_type: str = "filmes", resolution: str = "1080") -> List[Dict[str, Any]]:
+        """Retorna perfis recomendados baseados no hardware detectado."""
+        caps = hardware_detector.detect()
+        profile_ids = caps.get_recommended_profiles() if caps else []
+        
+        recommended_profiles = []
+        for profile_id in profile_ids:
+            profile = self.get_profile(profile_id)
+            if profile:
+                recommended_profiles.append({
+                    "id": profile_id,
+                    **profile
+                })
+        
+        return recommended_profiles
+    
+    def validate_profile_for_hardware(self, profile_id: str, hardware_detector: HardwareDetector) -> tuple[bool, str]:
+        """Valida se perfil é compatível com hardware detectado."""
+        profile = self.get_profile(profile_id)
+        if not profile:
+            return (False, f"Perfil não encontrado: {profile_id}")
+        
+        codec = profile.get('codec', '')
+        caps = hardware_detector.detect()
+        
+        codec_available = codec in (caps.available_codecs if caps else [])
+        
+        if not codec_available:
+            return (False, f"Codec '{codec}' não disponível no sistema")
+        
+        return (True, f"Perfil '{profile_id}' compatível com hardware")
+    
+    def get_hardware_detection_summary(self) -> Dict[str, Any]:
+        """Retorna resumo da detecção de hardware e perfis disponíveis."""
+        detector = HardwareDetector()
+        caps = detector.detect()
+        
+        hw_info = caps.to_dict() if caps else {}
+        
+        categories = {
+            "nvidia_gpu": len([p for p in self.list_profiles() if p.get('hardware_category') == 'nvidia_gpu']),
+            "amd_gpu": len([p for p in self.list_profiles() if p.get('hardware_category') == 'amd_gpu']),
+            "intel_igpu": len([p for p in self.list_profiles() if p.get('hardware_category') == 'intel_igpu']),
+            "amd_igpu": len([p for p in self.list_profiles() if p.get('hardware_category') == 'amd_igpu']),
+            "cpu": len([p for p in self.list_profiles() if p.get('hardware_category') == 'cpu'])
+        }
+        
+        return {
+            "hardware": hw_info,
+            "profiles_by_category": categories,
+            "total_profiles": len(self.list_profiles())
+        }

@@ -72,8 +72,9 @@ def main_menu():
             {"description": "Gerenciar perfis", "shortcut": "5"},
             {"description": "Ver estatísticas", "shortcut": "6"},
             {"description": "Verificar instalação", "shortcut": "7"},
-            {"description": "Gerenciar pastas watch", "shortcut": "8"},
-            {"description": "Sair", "shortcut": "9"}
+            {"description": "Detectar hardware", "shortcut": "8"},
+            {"description": "Gerenciar pastas watch", "shortcut": "9"},
+            {"description": "Sair", "shortcut": "0"}
         ]
         
         choice = menu.show_menu("Menu Principal", options)
@@ -175,6 +176,23 @@ def main_menu():
                         'gpu_memory_used': hw_stats.gpu_memory_used,
                         'cpu_util': hw_stats.cpu_util
                     })
+                    
+                    active_count = len(encoder.get_all_jobs())
+                    max_concurrent = config.get('encoding.max_concurrent', 2)
+                    
+                    if active_count < max_concurrent:
+                        next_job = queue_mgr.get_next_job()
+                        if next_job:
+                            from src.core.encoder_engine import EncodingJob
+                            job = EncodingJob(
+                                id=next_job['job_id'],
+                                input_path=next_job['input_path'],
+                                output_path=next_job['output_path'],
+                                profile=next_job['profile']
+                            )
+                            encoder.add_job(job)
+                            queue_mgr.mark_job_started(next_job['job_id'])
+                    
                     time.sleep(1)
             except KeyboardInterrupt:
                 console.print("\n[yellow]Parando watch mode...[/yellow]")
@@ -182,20 +200,8 @@ def main_menu():
                 hw_monitor.stop()
             
         elif choice == 3:
-            queue = queue_mgr.list_queue()
-            if queue:
-                menu.show_jobs_table([
-                    {
-                        "id": q['job_id'],
-                        "input_path": q['input_path'],
-                        "profile_name": q['profile'].get('name', ''),
-                        "status": "queued",
-                        "progress": 0
-                    } for q in queue
-                ])
-            else:
-                menu.print_info("Fila vazia")
-            input("\nPressione Enter para continuar...")
+            from src.ui.queue_menu import show_queue_submenu
+            show_queue_submenu(menu, queue_mgr, job_mgr)
             
         elif choice == 4:
             while True:
@@ -263,12 +269,12 @@ def main_menu():
                 elif profile_choice == 4:
                     break
             
-        elif choice == 5:
+        elif choice == 6:
             summary = stats_mgr.get_summary()
             menu.show_stats_panel(summary)
             input("\nPressione Enter para continuar...")
             
-        elif choice == 6:
+        elif choice == 7:
             console.print(Panel("[bold]Verificando instalação...[/bold]"))
             
             ffmpeg = FFmpegWrapper()
@@ -299,12 +305,77 @@ def main_menu():
             
             input("\nPressione Enter para continuar...")
             
-        elif choice == 7:
+        elif choice == 8:
+            from src.core.hw_detector import HardwareDetector
+            
+            console.print(Panel("[bold]Detectando hardware...[/bold]"))
+            
+            detector = HardwareDetector()
+            caps = detector.detect()
+            
+            if not caps:
+                console.print("[red]Erro ao detectar hardware[/red]")
+                input("\nPressione Enter para continuar...")
+                continue
+            
+            hw_info = caps.to_dict()
+            
+            console.print(f"\n[bold cyan]Hardware Detectado:[/bold cyan]")
+            
+            if hw_info.get('gpus_nvidia'):
+                for gpu in hw_info['gpus_nvidia']:
+                    console.print(f"  [green]•[/green] {gpu.get('name', 'NVIDIA GPU')} ({gpu.get('memory_gb', 0)}GB VRAM)")
+                    console.print(f"      NVENC: {'[green]Suportado[/green]' if gpu.get('nvenc_supported') else '[red]Não suportado[/red]'}")
+            else:
+                console.print("  [yellow]Nenhuma GPU NVIDIA detectada[/yellow]")
+            
+            if hw_info.get('gpus_amd'):
+                for gpu in hw_info['gpus_amd']:
+                    console.print(f"  [green]•[/green] {gpu.get('name', 'AMD GPU')}")
+                    console.print(f"      AMF: {'[green]Suportado[/green]' if gpu.get('amf_supported') else '[red]Não suportado[/red]'}")
+            else:
+                console.print("  [dim]Nenhuma GPU AMD detectada[/dim]")
+            
+            if hw_info.get('igpu_intel'):
+                igpu = hw_info['igpu_intel']
+                console.print(f"  [green]•[/green] {igpu.get('name', 'Intel iGPU')}")
+                console.print(f"      QSV: {'[green]Suportado[/green]' if igpu.get('qsv_supported') else '[red]Não suportado[/red]'}")
+            else:
+                console.print("  [dim]Nenhuma iGPU Intel detectada[/dim]")
+            
+            if hw_info.get('igpu_amd'):
+                igpu = hw_info['igpu_amd']
+                console.print(f"  [green]•[/green] {igpu.get('name', 'AMD iGPU')}")
+                console.print(f"      AMF: {'[green]Suportado[/green]' if igpu.get('amf_supported') else '[red]Não suportado[/red]'}")
+            else:
+                console.print("  [dim]Nenhuma iGPU AMD detectada[/dim]")
+            
+            console.print(f"\n[bold cyan]CPU:[/bold cyan] {hw_info.get('cpu_cores', 0)} núcleos, {hw_info.get('cpu_threads', 0)} threads")
+            console.print(f"[bold cyan]RAM:[/bold cyan] {hw_info.get('ram_gb', 0)} GB")
+            
+            console.print(f"\n[bold cyan]Backend recomendado:[/bold cyan] {hw_info.get('recommended_backend', 'unknown')}")
+            
+            console.print(f"\n[bold cyan]Codecs Disponíveis (FFmpeg):[/bold cyan]")
+            available_codecs = caps.available_codecs
+            if available_codecs:
+                for codec in available_codecs:
+                    console.print(f"  [green]•[/green] {codec}")
+            else:
+                console.print("  [yellow]Nenhum codec encontrado[/yellow]")
+            
+            console.print(f"\n[bold cyan]Perfis por Categoria:[/bold cyan]")
+            hw_summary = profile_mgr.get_hardware_detection_summary()
+            for category, count in hw_summary['profiles_by_category'].items():
+                console.print(f"  {category}: [cyan]{count}[/cyan] perfis")
+            
+            input("\nPressione Enter para continuar...")
+            
+        elif choice == 9:
             from src.ui.watch_folders_ui import WatchFoldersUI
             watch_ui = WatchFoldersUI(console, config, profile_mgr)
             watch_ui.show_submenu()
             
-        elif choice == 8:
+        elif choice == 0:
             break
 
 

@@ -13,6 +13,7 @@ from .managers.stats_manager import StatsManager
 from .managers.queue_manager import QueueManager
 from .core.ffmpeg_wrapper import FFmpegWrapper
 from .core.hw_monitor import HardwareMonitor
+from .core.hw_detector import HardwareDetector
 from .core.encoder_engine import EncoderEngine, EncodingStatus
 from .utils.path_utils import PathUtils
 from .utils.file_utils import FileUtils
@@ -68,6 +69,9 @@ def create_parser() -> argparse.ArgumentParser:
     
     parser.add_argument('--check', action='store_true', help='Verificar instalação (FFmpeg, GPU)')
     
+    parser.add_argument('--detect-hardware', action='store_true', help='Detectar hardware e mostrar codecs disponíveis')
+    parser.add_argument('--hardware', type=str, choices=['nvidia_gpu', 'amd_gpu', 'intel_igpu', 'amd_igpu', 'cpu'], help='Filtrar perfis por categoria de hardware')
+    
     return parser
 
 
@@ -102,16 +106,84 @@ def cmd_check(args, config: ConfigManager):
         console.print("[yellow][!][/yellow] GPU não detectada ou nvidia-smi não disponível")
 
 
+def cmd_detect_hardware(args, profile_mgr: ProfileManager):
+    """Detecta hardware e mostra perfis recomendados."""
+    console.print(Panel("[bold]Detectando hardware...[/bold]"))
+    
+    detector = HardwareDetector()
+    caps = detector.detect()
+    
+    if not caps:
+        console.print("[red]Erro ao detectar hardware[/red]")
+        return
+    
+    hw_info = caps.to_dict()
+    
+    console.print(f"\n[bold cyan]Hardware Detectado:[/bold cyan]")
+    
+    if hw_info.get('gpus_nvidia'):
+        for gpu in hw_info['gpus_nvidia']:
+            console.print(f"  [green]•[/green] {gpu.get('name', 'NVIDIA GPU')} ({gpu.get('memory_gb', 0)}GB VRAM)")
+            console.print(f"      NVENC: {'[green]Suportado[/green]' if gpu.get('nvenc_supported') else '[red]Não suportado[/red]'}")
+    else:
+        console.print("  [yellow]Nenhuma GPU NVIDIA detectada[/yellow]")
+    
+    if hw_info.get('gpus_amd'):
+        for gpu in hw_info['gpus_amd']:
+            console.print(f"  [green]•[/green] {gpu.get('name', 'AMD GPU')}")
+            console.print(f"      AMF: {'[green]Suportado[/green]' if gpu.get('amf_supported') else '[red]Não suportado[/red]'}")
+    else:
+        console.print("  [dim]Nenhuma GPU AMD detectada[/dim]")
+    
+    if hw_info.get('igpu_intel'):
+        igpu = hw_info['igpu_intel']
+        console.print(f"  [green]•[/green] {igpu.get('name', 'Intel iGPU')}")
+        console.print(f"      QSV: {'[green]Suportado[/green]' if igpu.get('qsv_supported') else '[red]Não suportado[/red]'}")
+    else:
+        console.print("  [dim]Nenhuma iGPU Intel detectada[/dim]")
+    
+    if hw_info.get('igpu_amd'):
+        igpu = hw_info['igpu_amd']
+        console.print(f"  [green]•[/green] {igpu.get('name', 'AMD iGPU')}")
+        console.print(f"      AMF: {'[green]Suportado[/green]' if igpu.get('amf_supported') else '[red]Não suportado[/red]'}")
+    else:
+        console.print("  [dim]Nenhuma iGPU AMD detectada[/dim]")
+    
+    console.print(f"\n[bold cyan]CPU:[/bold cyan] {hw_info.get('cpu_cores', 0)} núcleos, {hw_info.get('cpu_threads', 0)} threads")
+    console.print(f"[bold cyan]RAM:[/bold cyan] {hw_info.get('ram_gb', 0)} GB")
+    
+    console.print(f"\n[bold cyan]Backend recomendado:[/bold cyan] {hw_info.get('recommended_backend', 'unknown')}")
+    
+    console.print(f"\n[bold cyan]Codecs Disponíveis (FFmpeg):[/bold cyan]")
+    available_codecs = caps.available_codecs
+    if available_codecs:
+        for codec in available_codecs:
+            console.print(f"  [green]•[/green] {codec}")
+    else:
+        console.print("  [yellow]Nenhum codec encontrado[/yellow]")
+    
+    console.print(f"\n[bold cyan]Perfis por Categoria:[/bold cyan]")
+    hw_summary = profile_mgr.get_hardware_detection_summary()
+    for category, count in hw_summary['profiles_by_category'].items():
+        console.print(f"  {category}: [cyan]{count}[/cyan] perfis")
+
+
 def cmd_profile_list(args, profile_mgr: ProfileManager):
     """Lista perfis."""
-    profiles = profile_mgr.list_profiles()
+    if hasattr(args, 'hardware') and args.hardware:
+        profiles = profile_mgr.get_profiles_by_hardware_category(args.hardware)
+        title = f"Perfis - Hardware: {args.hardware}"
+    else:
+        profiles = profile_mgr.list_profiles()
+        title = "Perfis Disponíveis"
     
-    table = Table(title="Perfis Disponíveis", show_header=True, header_style="bold magenta")
+    table = Table(title=title, show_header=True, header_style="bold magenta")
     table.add_column("ID", style="dim")
     table.add_column("Nome", style="cyan")
     table.add_column("Codec", style="green")
     table.add_column("CQ", style="yellow")
     table.add_column("Resolução", style="blue")
+    table.add_column("Hardware", style="magenta")
     table.add_column("Descrição", style="dim")
     
     for profile in profiles:
@@ -121,6 +193,7 @@ def cmd_profile_list(args, profile_mgr: ProfileManager):
             profile.get('codec', ''),
             profile.get('cq', '-') or '-',
             profile.get('resolution', '-') or '-',
+            profile.get('hardware_category', 'unknown'),
             profile.get('description', '')
         )
     
@@ -727,6 +800,10 @@ def main():
     
     if args.check:
         cmd_check(args, config)
+        return
+    
+    if args.detect_hardware:
+        cmd_detect_hardware(args, profile_mgr)
         return
     
     if args.profile_list:

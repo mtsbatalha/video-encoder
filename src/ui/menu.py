@@ -224,3 +224,68 @@ class Menu:
         content.append(f"{cpu_bar} {cpu_util}%\n", style="white")
         
         self.console.print(Panel(content, border_style="cyan", title="Hardware Monitor"))
+    
+    def show_hardware_detection_panel(self, hw_info: Dict[str, Any]):
+        """Exibe painel de detecção de hardware."""
+        content = Text()
+        
+        content.append("[HW] Detecção de Hardware\n\n", style="bold magenta")
+        
+        if hw_info.get('gpus'):
+            for gpu in hw_info['gpus']:
+                content.append(f"• {gpu['name']}\n", style="bold green")
+                content.append(f"  Categoria: {gpu['category']}\n", style="dim")
+                content.append(f"  VRAM: {gpu['vram_gb']}GB\n", style="dim")
+                content.append(f"  Codecs: {', '.join(gpu['codec_support'])}\n\n", style="cyan")
+        else:
+            content.append("Nenhuma GPU dedicada detectada\n", style="yellow")
+        
+        content.append(f"\nCPU Disponível: {'Sim' if hw_info.get('cpu_available') else 'Não'}\n", style="blue")
+        
+        content.append(f"\nResumo:\n", style="bold magenta")
+        nvidia_color = "green" if hw_info.get('nvidia_detected') else "red"
+        content.append(f"  NVIDIA GPU: ", style="white")
+        content.append(f"{'Detectada' if hw_info.get('nvidia_detected') else 'Não detectada'}\n", style=nvidia_color)
+        
+        amd_color = "green" if hw_info.get('amd_gpu_detected') else "dim"
+        content.append(f"  AMD GPU: ", style="white")
+        content.append(f"{'Detectada' if hw_info.get('amd_gpu_detected') else 'Não detectada'}\n", style=amd_color)
+        
+        intel_color = "green" if hw_info.get('intel_igpu_detected') else "dim"
+        content.append(f"  Intel iGPU: ", style="white")
+        content.append(f"{'Detectada' if hw_info.get('intel_igpu_detected') else 'Não detectada'}\n", style=intel_color)
+        
+        self.console.print(Panel(content, border_style="magenta", title="Detecção de Hardware"))
+    
+    def show_hardware_categories_menu(self) -> int:
+        """Exibe menu de categorias de hardware e retorna escolha."""
+        self.print_header("Perfis por Hardware")
+        self.console.print()
+        
+        table = Table(show_header=False, box=None)
+        table.add_column("#", style="bold green", width=4)
+        table.add_column("Categoria", style="white")
+        table.add_column("Codecs", style="cyan")
+        
+        categories = [
+            ("NVIDIA GPU", "hevc_nvenc, h264_nvenc, av1_nvenc"),
+            ("AMD GPU", "hevc_amf, h264_amf"),
+            ("Intel iGPU", "hevc_qsv, h264_qsv"),
+            ("AMD iGPU", "hevc_amf, h264_amf"),
+            ("CPU Qualidade", "libx265, libx264"),
+            ("CPU Rápido", "libx265, libx264")
+        ]
+        
+        for i, (cat, codecs) in enumerate(categories, 1):
+            table.add_row(str(i), cat, codecs)
+        
+        self.console.print(table)
+        self.console.print()
+        
+        max_option = len(categories)
+        choice = IntPrompt.ask(
+            "Escolha categoria de hardware",
+            choices=[str(i) for i in range(1, max_option + 1)]
+        )
+        
+        return choice - 1

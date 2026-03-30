@@ -1,22 +1,32 @@
-# Fabrica de Conversão NVENC Pro v2.0
+# Fabrica de Conversão Multi-Hardware Pro v2.0
 
-Codificação de vídeo acelerada por GPU NVIDIA com interface CLI moderna e menu interativo.
+Codificação de vídeo acelerada por GPU (NVIDIA NVENC, AMD AMF, Intel QSV) e CPU com interface CLI moderna e menu interativo.
 
 ## Requisitos
 
 - Python 3.8+
-- NVIDIA GPU com suporte NVENC
-- FFmpeg com codecs NVENC
-- Drivers NVIDIA atualizados
+- GPU com suporte a aceleração hardware (NVIDIA NVENC, AMD AMF, Intel QSV) ou CPU
+- FFmpeg com codecs de hardware (nvenc, amf, qsv)
+- Drivers de vídeo atualizados
 
-## Instalação
+### Dependências Opcionais (Detecção Automática de Hardware)
 
 ```bash
-# Instalar dependências
-pip install rich psutil
+pip install pynvml pywin32
+```
 
-# Verificar instalação
-python vigia_nvenc.py --check
+## Detecção de Hardware
+
+```bash
+# Detectar hardware e perfis recomendados
+python vigia_nvenc.py --detect-hardware
+
+# Listar perfis por categoria de hardware
+python vigia_nvenc.py --profile-list --hardware nvidia_gpu
+python vigia_nvenc.py --profile-list --hardware amd_gpu
+python vigia_nvenc.py --profile-list --hardware intel_igpu
+python vigia_nvenc.py --profile-list --hardware amd_igpu
+python vigia_nvenc.py --profile-list --hardware cpu
 ```
 
 ## Uso Rápido
@@ -106,41 +116,90 @@ python vigia_nvenc.py --queue-clear
 
 ## Perfis Incluídos
 
-### Filmes (Qualidade Priorizada)
+### Matriz de Codecs por Hardware
 
-| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
-|--------|-------|-----|-----------|---------|-----------|
-| Filmes 4K HEVC | hevc_nvenc | 18 | Original | Não | Alta qualidade 4K, HDR preservado |
-| Filmes 4K H264 | h264_nvenc | 20 | Original | Sim | Compatibilidade máxima, HDR→SDR |
-| Filmes 1080p HEVC | hevc_nvenc | 20 | 1080p | Não | Qualidade balanceada, HDR preservado |
-| Filmes 1080p H264 | h264_nvenc | 21 | 1080p | Sim | Compatibilidade, HDR→SDR |
-| Filmes 720p HEVC | hevc_nvenc | 22 | 720p | Sim | Arquivos menores, HDR→SDR |
-| Filmes 720p H264 | h264_nvenc | 23 | 720p | Sim | TVs antigas, HDR→SDR |
+| Hardware | Codec HEVC | Codec H264 | Presets |
+|----------|------------|------------|---------|
+| NVIDIA GPU | hevc_nvenc | h264_nvenc | p1-p7 |
+| AMD GPU | hevc_amf | h264_amf | quality/balanced/speed |
+| Intel iGPU | hevc_qsv | h264_qsv | fast/balanced/slow |
+| CPU | libx265 | libx264 | ultrafast-veryslow |
 
-### Séries (Compressão Priorizada)
+### NVIDIA GPU (12 Perfis)
 
-| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
-|--------|-------|-----|-----------|---------|-----------|
-| Series 4K HEVC | hevc_nvenc | 22 | Original | Não | Qualidade 4K, HDR preservado |
-| Series 4K H264 | h264_nvenc | 24 | Original | Sim | Compatibilidade, HDR→SDR |
-| Series 1080p HEVC | hevc_nvenc | 24 | 1080p | Não | Balanceado, HDR preservado |
-| Series 1080p H264 | h264_nvenc | 25 | 1080p | Sim | Compatibilidade, HDR→SDR |
-| Series 720p HEVC | hevc_nvenc | 26 | 720p | Sim | Arquivos leves, HDR→SDR |
-| Series 720p H264 | h264_nvenc | 27 | 720p | Sim | Máxima compressão, HDR→SDR |
+| Perfil | Codec | CQ | Preset | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|--------|-----------|---------|-----------|
+| NVIDIA Filmes 4K HEVC | hevc_nvenc | 18 | p5 | Original | Não | Alta qualidade 4K |
+| NVIDIA Filmes 4K H264 | h264_nvenc | 20 | p5 | Original | Sim | Compatibilidade máxima |
+| NVIDIA Filmes 1080p HEVC | hevc_nvenc | 20 | p4 | 1080p | Não | Qualidade balanceada |
+| NVIDIA Filmes 1080p H264 | h264_nvenc | 21 | p4 | 1080p | Sim | Compatibilidade |
+| NVIDIA Filmes 720p HEVC | hevc_nvenc | 22 | p3 | 720p | Sim | Arquivos menores |
+| NVIDIA Filmes 720p H264 | h264_nvenc | 23 | p3 | 720p | Sim | TVs antigas |
+| NVIDIA Series 4K HEVC | hevc_nvenc | 22 | p4 | Original | Não | Qualidade 4K |
+| NVIDIA Series 4K H264 | h264_nvenc | 24 | p4 | Original | Sim | Compatibilidade |
+| NVIDIA Series 1080p HEVC | hevc_nvenc | 24 | p3 | 1080p | Não | Balanceado |
+| NVIDIA Series 1080p H264 | h264_nvenc | 25 | p3 | 1080p | Sim | Compatibilidade |
+| NVIDIA Series 720p HEVC | hevc_nvenc | 26 | p2 | 720p | Sim | Arquivos leves |
+| NVIDIA Series 720p H264 | h264_nvenc | 27 | p2 | 720p | Sim | Máxima compressão |
 
-### Animação
+### AMD GPU (8 Perfis)
 
-| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
-|--------|-------|-----|-----------|---------|-----------|
-| Animação 1080p HEVC | hevc_nvenc | 18 | 1080p | Não | Otimizado para desenhos |
-| Animação 720p H264 | h264_nvenc | 20 | 720p | Sim | Compatibilidade |
+| Perfil | Codec | CQ | Preset | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|--------|-----------|---------|-----------|
+| AMD Filmes 1080p HEVC | hevc_amf | 20 | quality | 1080p | Não | Alta qualidade |
+| AMD Filmes 1080p H264 | h264_amf | 21 | quality | 1080p | Sim | Compatibilidade |
+| AMD Filmes 720p HEVC | hevc_amf | 22 | balanced | 720p | Sim | Balanceado |
+| AMD Filmes 720p H264 | h264_amf | 23 | balanced | 720p | Sim | Compatibilidade |
+| AMD Series 1080p HEVC | hevc_amf | 24 | balanced | 1080p | Não | Balanceado |
+| AMD Series 1080p H264 | h264_amf | 25 | balanced | 1080p | Sim | Compatibilidade |
+| AMD Series 720p HEVC | hevc_amf | 26 | speed | 720p | Sim | Arquivos leves |
+| AMD Series 720p H264 | h264_amf | 27 | speed | 720p | Sim | Máxima compressão |
 
-### Documentários
+### Intel iGPU (8 Perfis)
 
-| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
-|--------|-------|-----|-----------|---------|-----------|
-| Documentário 1080p HEVC | hevc_nvenc | 24 | 1080p | Não | Conteúdo estático |
-| Documentário 720p H264 | h264_nvenc | 26 | 720p | Sim | Compatibilidade |
+| Perfil | Codec | CQ | Preset | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|--------|-----------|---------|-----------|
+| Intel Filmes 1080p HEVC | hevc_qsv | 20 | slow | 1080p | Não | Alta qualidade |
+| Intel Filmes 1080p H264 | h264_qsv | 21 | slow | 1080p | Sim | Compatibilidade |
+| Intel Filmes 720p HEVC | hevc_qsv | 22 | balanced | 720p | Sim | Balanceado |
+| Intel Filmes 720p H264 | h264_qsv | 23 | balanced | 720p | Sim | Compatibilidade |
+| Intel Series 1080p HEVC | hevc_qsv | 24 | balanced | 1080p | Não | Balanceado |
+| Intel Series 1080p H264 | h264_qsv | 25 | balanced | 1080p | Sim | Compatibilidade |
+| Intel Series 720p HEVC | hevc_qsv | 26 | fast | 720p | Sim | Arquivos leves |
+| Intel Series 720p H264 | h264_qsv | 27 | fast | 720p | Sim | Máxima compressão |
+
+### AMD iGPU (8 Perfis)
+
+| Perfil | Codec | CQ | Preset | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|--------|-----------|---------|-----------|
+| AMD iGPU Filmes 1080p HEVC | hevc_amf | 20 | quality | 1080p | Não | Alta qualidade |
+| AMD iGPU Filmes 1080p H264 | h264_amf | 21 | quality | 1080p | Sim | Compatibilidade |
+| AMD iGPU Filmes 720p HEVC | hevc_amf | 22 | balanced | 720p | Sim | Balanceado |
+| AMD iGPU Filmes 720p H264 | h264_amf | 23 | balanced | 720p | Sim | Compatibilidade |
+| AMD iGPU Series 1080p HEVC | hevc_amf | 24 | balanced | 1080p | Não | Balanceado |
+| AMD iGPU Series 1080p H264 | h264_amf | 25 | balanced | 1080p | Sim | Compatibilidade |
+| AMD iGPU Series 720p HEVC | hevc_amf | 26 | speed | 720p | Sim | Arquivos leves |
+| AMD iGPU Series 720p H264 | h264_amf | 27 | speed | 720p | Sim | Máxima compressão |
+
+### CPU Qualidade (4 Perfis)
+
+| Perfil | Codec | CQ | Preset | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|--------|-----------|---------|-----------|
+| CPU Filmes 1080p HEVC | libx265 | 20 | slow | 1080p | Não | Máxima qualidade CPU |
+| CPU Filmes 1080p H264 | libx264 | 21 | slow | 1080p | Sim | Compatibilidade |
+| CPU Series 1080p HEVC | libx265 | 24 | medium | 1080p | Não | Balanceado |
+| CPU Series 1080p H264 | libx264 | 25 | medium | 1080p | Sim | Compatibilidade |
+
+### CPU Rápido (4 Perfis)
+
+| Perfil | Codec | CQ | Preset | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|--------|-----------|---------|-----------|
+| CPU Rápido 1080p HEVC | libx265 | 26 | fast | 1080p | Não | Encoding rápido |
+| CPU Rápido 1080p H264 | libx264 | 27 | fast | 1080p | Sim | Compatibilidade |
+| CPU Rápido 720p HEVC | libx265 | 28 | faster | 720p | Sim | Máxima velocidade |
+| CPU Rápido 720p H264 | libx264 | 29 | faster | 720p | Sim | Compatibilidade |
+
+**Total: 44 Perfis**
 
 ## Configuração
 
