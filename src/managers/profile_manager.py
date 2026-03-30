@@ -9,245 +9,318 @@ class ProfileManager:
     """Gerenciador de perfis de encoding."""
     
     DEFAULT_PROFILES: Dict[str, Dict[str, Any]] = {
-        "filmes_4k_hevc": {
-            "name": "Filmes 4K HEVC",
+        # === NVIDIA GPU (NVENC) ===
+        "nvidia_filmes_4k_hevc": {
+            "name": "NVIDIA Filmes 4K HEVC",
             "description": "Alta qualidade para filmes 4K - CQ 18, resolução original, HDR preservado",
-            "codec": "hevc_nvenc",
-            "cq": "18",
-            "preset": "p5",
-            "resolution": None,
-            "hdr_to_sdr": False,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "hevc_nvenc", "cq": "18", "preset": "p5", "resolution": None,
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "filmes_4k_h264": {
-            "name": "Filmes 4K H264",
+        "nvidia_filmes_4k_h264": {
+            "name": "NVIDIA Filmes 4K H264",
             "description": "Compatibilidade máxima para filmes 4K - CQ 20, HDR convertido para SDR",
-            "codec": "h264_nvenc",
-            "cq": "20",
-            "preset": "p5",
-            "resolution": None,
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "h264_nvenc", "cq": "20", "preset": "p5", "resolution": None,
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "filmes_1080p_hevc": {
-            "name": "Filmes 1080p HEVC",
+        "nvidia_filmes_1080p_hevc": {
+            "name": "NVIDIA Filmes 1080p HEVC",
             "description": "Qualidade balanceada para filmes 1080p - CQ 20, HDR preservado",
-            "codec": "hevc_nvenc",
-            "cq": "20",
-            "preset": "p5",
-            "resolution": "1080",
-            "hdr_to_sdr": False,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "hevc_nvenc", "cq": "20", "preset": "p5", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "filmes_1080p_h264": {
-            "name": "Filmes 1080p H264",
+        "nvidia_filmes_1080p_h264": {
+            "name": "NVIDIA Filmes 1080p H264",
             "description": "Compatibilidade para filmes 1080p - CQ 21, HDR convertido para SDR",
-            "codec": "h264_nvenc",
-            "cq": "21",
-            "preset": "p5",
-            "resolution": "1080",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "h264_nvenc", "cq": "21", "preset": "p5", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "filmes_720p_hevc": {
-            "name": "Filmes 720p HEVC",
+        "nvidia_filmes_720p_hevc": {
+            "name": "NVIDIA Filmes 720p HEVC",
             "description": "Arquivos menores para filmes 720p - CQ 22, HDR convertido para SDR",
-            "codec": "hevc_nvenc",
-            "cq": "22",
-            "preset": "p4",
-            "resolution": "720",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "hevc_nvenc", "cq": "22", "preset": "p4", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "filmes_720p_h264": {
-            "name": "Filmes 720p H264",
+        "nvidia_filmes_720p_h264": {
+            "name": "NVIDIA Filmes 720p H264",
             "description": "Compatibilidade máxima para TVs antigas - CQ 23, HDR convertido para SDR",
-            "codec": "h264_nvenc",
-            "cq": "23",
-            "preset": "p5",
-            "resolution": "720",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "h264_nvenc", "cq": "23", "preset": "p5", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "series_4k_hevc": {
-            "name": "Series 4K HEVC",
+        "nvidia_series_4k_hevc": {
+            "name": "NVIDIA Series 4K HEVC",
             "description": "Qualidade para séries 4K - CQ 22, resolução original, HDR preservado",
-            "codec": "hevc_nvenc",
-            "cq": "22",
-            "preset": "p5",
-            "resolution": None,
-            "hdr_to_sdr": False,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "hevc_nvenc", "cq": "22", "preset": "p5", "resolution": None,
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "series_4k_h264": {
-            "name": "Series 4K H264",
+        "nvidia_series_4k_h264": {
+            "name": "NVIDIA Series 4K H264",
             "description": "Compatibilidade para séries 4K - CQ 24, HDR convertido para SDR",
-            "codec": "h264_nvenc",
-            "cq": "24",
-            "preset": "p5",
-            "resolution": None,
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "h264_nvenc", "cq": "24", "preset": "p5", "resolution": None,
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "series_1080p_hevc": {
-            "name": "Series 1080p HEVC",
+        "nvidia_series_1080p_hevc": {
+            "name": "NVIDIA Series 1080p HEVC",
             "description": "Balanceado para séries 1080p - CQ 24, HDR preservado",
-            "codec": "hevc_nvenc",
-            "cq": "24",
-            "preset": "p5",
-            "resolution": "1080",
-            "hdr_to_sdr": False,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "hevc_nvenc", "cq": "24", "preset": "p5", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "series_1080p_h264": {
-            "name": "Series 1080p H264",
+        "nvidia_series_1080p_h264": {
+            "name": "NVIDIA Series 1080p H264",
             "description": "Compatibilidade para séries 1080p - CQ 25, HDR convertido para SDR",
-            "codec": "h264_nvenc",
-            "cq": "25",
-            "preset": "p5",
-            "resolution": "1080",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "h264_nvenc", "cq": "25", "preset": "p5", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "series_720p_hevc": {
-            "name": "Series 720p HEVC",
+        "nvidia_series_720p_hevc": {
+            "name": "NVIDIA Series 720p HEVC",
             "description": "Arquivos leves para séries 720p - CQ 26, HDR convertido para SDR",
-            "codec": "hevc_nvenc",
-            "cq": "26",
-            "preset": "p4",
-            "resolution": "720",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "hevc_nvenc", "cq": "26", "preset": "p4", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "series_720p_h264": {
-            "name": "Series 720p H264",
+        "nvidia_series_720p_h264": {
+            "name": "NVIDIA Series 720p H264",
             "description": "Máxima compressão para séries 720p - CQ 27, HDR convertido para SDR",
-            "codec": "h264_nvenc",
-            "cq": "27",
-            "preset": "p5",
-            "resolution": "720",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+            "codec": "h264_nvenc", "cq": "27", "preset": "p5", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "nvidia_gpu"
         },
-        "animacao_1080p_hevc": {
-            "name": "Animação 1080p HEVC",
-            "description": "Otimizado para animação/desenhos - CQ 18, menos detalhes, áreas lisas",
-            "codec": "hevc_nvenc",
-            "cq": "18",
-            "preset": "p4",
-            "resolution": "1080",
-            "hdr_to_sdr": False,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+        # === AMD GPU (AMF) ===
+        "amd_gpu_filmes_1080p_hevc": {
+            "name": "AMD GPU Filmes 1080p HEVC",
+            "description": "Qualidade para filmes 1080p - AMD AMF, CQ 20, HDR preservado",
+            "codec": "hevc_amf", "cq": "20", "preset": "quality", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
         },
-        "animacao_720p_h264": {
-            "name": "Animação 720p H264",
-            "description": "Compatibilidade para animação 720p - CQ 20, HDR convertido para SDR",
-            "codec": "h264_nvenc",
-            "cq": "20",
-            "preset": "p5",
-            "resolution": "720",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+        "amd_gpu_filmes_1080p_h264": {
+            "name": "AMD GPU Filmes 1080p H264",
+            "description": "Compatibilidade para filmes 1080p - AMD AMF, CQ 21",
+            "codec": "h264_amf", "cq": "21", "preset": "quality", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
         },
-        "documentario_1080p_hevc": {
-            "name": "Documentário 1080p HEVC",
-            "description": "Otimizado para documentários - CQ 24, conteúdo estático",
-            "codec": "hevc_nvenc",
-            "cq": "24",
-            "preset": "p5",
-            "resolution": "1080",
-            "hdr_to_sdr": False,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+        "amd_gpu_filmes_720p_hevc": {
+            "name": "AMD GPU Filmes 720p HEVC",
+            "description": "Arquivos menores 720p - AMD AMF, CQ 22",
+            "codec": "hevc_amf", "cq": "22", "preset": "balanced", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
         },
-        "documentario_720p_h264": {
-            "name": "Documentário 720p H264",
-            "description": "Compatibilidade para documentários 720p - CQ 26, conteúdo estático",
-            "codec": "h264_nvenc",
-            "cq": "26",
-            "preset": "p5",
-            "resolution": "720",
-            "hdr_to_sdr": True,
-            "deinterlace": False,
-            "plex_compatible": True,
-            "two_pass": False,
-            "audio_tracks": None,
-            "subtitle_burn": False,
-            "created_at": "2024-01-01T00:00:00"
+        "amd_gpu_filmes_720p_h264": {
+            "name": "AMD GPU Filmes 720p H264",
+            "description": "Compatibilidade 720p - AMD AMF, CQ 23",
+            "codec": "h264_amf", "cq": "23", "preset": "balanced", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
+        },
+        "amd_gpu_series_1080p_hevc": {
+            "name": "AMD GPU Series 1080p HEVC",
+            "description": "Balanceado séries 1080p - AMD AMF, CQ 24",
+            "codec": "hevc_amf", "cq": "24", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
+        },
+        "amd_gpu_series_1080p_h264": {
+            "name": "AMD GPU Series 1080p H264",
+            "description": "Compatibilidade séries 1080p - AMD AMF, CQ 25",
+            "codec": "h264_amf", "cq": "25", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
+        },
+        "amd_gpu_series_720p_hevc": {
+            "name": "AMD GPU Series 720p HEVC",
+            "description": "Arquivos leves 720p - AMD AMF, CQ 26",
+            "codec": "hevc_amf", "cq": "26", "preset": "speed", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
+        },
+        "amd_gpu_series_720p_h264": {
+            "name": "AMD GPU Series 720p H264",
+            "description": "Máxima compressão 720p - AMD AMF, CQ 27",
+            "codec": "h264_amf", "cq": "27", "preset": "speed", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_gpu"
+        },
+        # === Intel iGPU (QSV) ===
+        "intel_igpu_filmes_1080p_hevc": {
+            "name": "Intel iGPU Filmes 1080p HEVC",
+            "description": "Qualidade filmes 1080p - Intel QSV, CQ 20, HDR preservado",
+            "codec": "hevc_qsv", "cq": "20", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        "intel_igpu_filmes_1080p_h264": {
+            "name": "Intel iGPU Filmes 1080p H264",
+            "description": "Compatibilidade filmes 1080p - Intel QSV, CQ 21",
+            "codec": "h264_qsv", "cq": "21", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        "intel_igpu_filmes_720p_hevc": {
+            "name": "Intel iGPU Filmes 720p HEVC",
+            "description": "Arquivos menores 720p - Intel QSV, CQ 22",
+            "codec": "hevc_qsv", "cq": "22", "preset": "fast", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        "intel_igpu_filmes_720p_h264": {
+            "name": "Intel iGPU Filmes 720p H264",
+            "description": "Compatibilidade 720p - Intel QSV, CQ 23",
+            "codec": "h264_qsv", "cq": "23", "preset": "fast", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        "intel_igpu_series_1080p_hevc": {
+            "name": "Intel iGPU Series 1080p HEVC",
+            "description": "Balanceado séries 1080p - Intel QSV, CQ 24",
+            "codec": "hevc_qsv", "cq": "24", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        "intel_igpu_series_1080p_h264": {
+            "name": "Intel iGPU Series 1080p H264",
+            "description": "Compatibilidade séries 1080p - Intel QSV, CQ 25",
+            "codec": "h264_qsv", "cq": "25", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        "intel_igpu_series_720p_hevc": {
+            "name": "Intel iGPU Series 720p HEVC",
+            "description": "Arquivos leves 720p - Intel QSV, CQ 26",
+            "codec": "hevc_qsv", "cq": "26", "preset": "fast", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        "intel_igpu_series_720p_h264": {
+            "name": "Intel iGPU Series 720p H264",
+            "description": "Máxima compressão 720p - Intel QSV, CQ 27",
+            "codec": "h264_qsv", "cq": "27", "preset": "fast", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "intel_igpu"
+        },
+        # === AMD iGPU (APU AMF) ===
+        "amd_igpu_filmes_1080p_hevc": {
+            "name": "AMD iGPU Filmes 1080p HEVC",
+            "description": "Qualidade filmes 1080p - AMD APU AMF, CQ 20, HDR preservado",
+            "codec": "hevc_amf", "cq": "20", "preset": "quality", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        "amd_igpu_filmes_1080p_h264": {
+            "name": "AMD iGPU Filmes 1080p H264",
+            "description": "Compatibilidade filmes 1080p - AMD APU AMF, CQ 21",
+            "codec": "h264_amf", "cq": "21", "preset": "quality", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        "amd_igpu_filmes_720p_hevc": {
+            "name": "AMD iGPU Filmes 720p HEVC",
+            "description": "Arquivos menores 720p - AMD APU AMF, CQ 22",
+            "codec": "hevc_amf", "cq": "22", "preset": "balanced", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        "amd_igpu_filmes_720p_h264": {
+            "name": "AMD iGPU Filmes 720p H264",
+            "description": "Compatibilidade 720p - AMD APU AMF, CQ 23",
+            "codec": "h264_amf", "cq": "23", "preset": "balanced", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        "amd_igpu_series_1080p_hevc": {
+            "name": "AMD iGPU Series 1080p HEVC",
+            "description": "Balanceado séries 1080p - AMD APU AMF, CQ 24",
+            "codec": "hevc_amf", "cq": "24", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        "amd_igpu_series_1080p_h264": {
+            "name": "AMD iGPU Series 1080p H264",
+            "description": "Compatibilidade séries 1080p - AMD APU AMF, CQ 25",
+            "codec": "h264_amf", "cq": "25", "preset": "balanced", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        "amd_igpu_series_720p_hevc": {
+            "name": "AMD iGPU Series 720p HEVC",
+            "description": "Arquivos leves 720p - AMD APU AMF, CQ 26",
+            "codec": "hevc_amf", "cq": "26", "preset": "speed", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        "amd_igpu_series_720p_h264": {
+            "name": "AMD iGPU Series 720p H264",
+            "description": "Máxima compressão 720p - AMD APU AMF, CQ 27",
+            "codec": "h264_amf", "cq": "27", "preset": "speed", "resolution": "720",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "amd_igpu"
+        },
+        # === CPU (libx265/libx264) ===
+        "cpu_qualidade_filmes_1080p_hevc": {
+            "name": "CPU Qualidade Filmes 1080p HEVC",
+            "description": "Máxima qualidade CPU - libx265 CRF 18, slow preset",
+            "codec": "libx265", "cq": "18", "preset": "slow", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
+        },
+        "cpu_qualidade_filmes_1080p_h264": {
+            "name": "CPU Qualidade Filmes 1080p H264",
+            "description": "Máxima qualidade CPU - libx264 CRF 18, slow preset",
+            "codec": "libx264", "cq": "18", "preset": "slow", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
+        },
+        "cpu_qualidade_series_1080p_hevc": {
+            "name": "CPU Qualidade Series 1080p HEVC",
+            "description": "Qualidade CPU séries - libx265 CRF 20, medium preset",
+            "codec": "libx265", "cq": "20", "preset": "medium", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
+        },
+        "cpu_qualidade_series_1080p_h264": {
+            "name": "CPU Qualidade Series 1080p H264",
+            "description": "Qualidade CPU séries - libx264 CRF 20, medium preset",
+            "codec": "libx264", "cq": "20", "preset": "medium", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
+        },
+        "cpu_rapido_filmes_1080p_hevc": {
+            "name": "CPU Rápido Filmes 1080p HEVC",
+            "description": "Encoding rápido CPU - libx265 CRF 22, veryfast preset",
+            "codec": "libx265", "cq": "22", "preset": "veryfast", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
+        },
+        "cpu_rapido_filmes_1080p_h264": {
+            "name": "CPU Rápido Filmes 1080p H264",
+            "description": "Encoding rápido CPU - libx264 CRF 22, veryfast preset",
+            "codec": "libx264", "cq": "22", "preset": "veryfast", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
+        },
+        "cpu_rapido_series_1080p_hevc": {
+            "name": "CPU Rápido Series 1080p HEVC",
+            "description": "Rápido séries CPU - libx265 CRF 24, veryfast preset",
+            "codec": "libx265", "cq": "24", "preset": "veryfast", "resolution": "1080",
+            "hdr_to_sdr": False, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
+        },
+        "cpu_rapido_series_1080p_h264": {
+            "name": "CPU Rápido Series 1080p H264",
+            "description": "Rápido séries CPU - libx264 CRF 24, veryfast preset",
+            "codec": "libx264", "cq": "24", "preset": "veryfast", "resolution": "1080",
+            "hdr_to_sdr": True, "deinterlace": False, "plex_compatible": True, "two_pass": False,
+            "hardware_category": "cpu"
         }
     }
     
