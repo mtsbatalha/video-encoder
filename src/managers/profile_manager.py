@@ -296,6 +296,7 @@ class ProfileManager:
         return [
             {"id": pid, **data}
             for pid, data in self._profiles.items()
+            if not pid.startswith('_') and isinstance(data, dict) and 'name' in data
         ]
     
     def create_profile(
