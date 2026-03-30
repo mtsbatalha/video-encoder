@@ -392,6 +392,78 @@ def run_watch_mode(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: 
         encoder.stop()
 
 
+def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
+    """Processa a fila de jobs interativamente."""
+    queue = queue_mgr.list_queue()
+    
+    if not queue:
+        console.print("[yellow][!][/yellow] Fila vazia")
+        input("\nPressione Enter para continuar...")
+        return
+    
+    console.print(f"\n[bold]Processando {len(queue)} job(s) da fila...[/bold]\n")
+    
+    encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 2))
+    
+    def on_progress(job_id: str, progress: float):
+        job_mgr.update_progress(job_id, progress)
+    
+    def on_status(job_id: str, status: EncodingStatus):
+        job_status = map_encoding_to_job_status(status)
+        job_mgr.update_job_status(job_id, job_status)
+        if status == EncodingStatus.COMPLETED:
+            job = job_mgr.get_job(job_id)
+            if job:
+                stats_mgr.record_encode(
+                    profile_id=job.get('profile_id', ''),
+                    profile_name=job.get('profile_name', ''),
+                    success=True,
+                    duration_seconds=0,
+                    input_size=job.get('input_size', 0),
+                    output_size=job.get('output_size', 0)
+                )
+            queue_mgr.remove_from_queue(job_id)
+        elif status == EncodingStatus.FAILED:
+            job = job_mgr.get_job(job_id)
+            if job:
+                stats_mgr.record_encode(
+                    profile_id=job.get('profile_id', ''),
+                    profile_name=job.get('profile_name', ''),
+                    success=False,
+                    duration_seconds=0,
+                    input_size=0,
+                    output_size=0,
+                    failure_reason=job.get('error_message', '')
+                )
+    
+    encoder.add_progress_callback(on_progress)
+    encoder.add_status_callback(on_status)
+    
+    for item in queue:
+        job = job_mgr.get_job(item['job_id'])
+        if job:
+            from .core.encoder_engine import EncodingJob
+            encoding_job = EncodingJob(
+                id=item['job_id'],
+                input_path=item['input_path'],
+                output_path=item['output_path'],
+                profile=item['profile']
+            )
+            encoder.add_job(encoding_job)
+    
+    encoder.start()
+    
+    try:
+        while encoder._running and (encoder._jobs or encoder._active_jobs):
+            time.sleep(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Parando processamento...[/yellow]")
+        encoder.stop()
+    
+    console.print("\n[green][OK][/green] Processamento da fila concluído")
+    input("\nPressione Enter para continuar...")
+
+
 def run_single_file(args, config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, stats_mgr: StatsManager):
     """Codifica arquivo único."""
     input_path = PathUtils.normalize_path(args.file)
@@ -595,9 +667,9 @@ def run_interactive_mode(config: ConfigManager, profile_mgr: ProfileManager, job
         choice = menu.show_menu("Menu Principal", options)
         
         if choice == 0:
-            run_single_file_cli(config, profile_mgr, job_mgr, stats_mgr)
+            run_single_file_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         elif choice == 1:
-            run_folder_mode_cli(config, profile_mgr, job_mgr, queue_mgr)
+            run_folder_mode_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         elif choice == 2:
             queue = queue_mgr.list_queue()
             if queue:
@@ -671,7 +743,7 @@ def get_file_size(path: str) -> int:
         return 0
 
 
-def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, stats_mgr: StatsManager):
+def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
     """CLI para arquivo único."""
     menu = Menu(console)
     
@@ -696,22 +768,36 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
     
     output_path = PathUtils.generate_output_path(input_path, output_dir, suffix="-encoded")
     
-    _job_id = job_mgr.create_job(
+    job_id = job_mgr.create_job(
         input_path=input_path,
         output_path=output_path,
         profile_id=profile['id'],
         profile_name=profile['name']
     )
     
-    console.print("\n[bold]Iniciando encode[/bold]")
-    console.print(f"  Input:  {input_path}")
-    console.print(f"  Output: {output_path}")
-    console.print(f"  Perfil: {profile['name']}")
+    queue_was_empty = queue_mgr.get_queue_length() == 0
     
-    input("\nPressione Enter para continuar...")
+    queue_mgr.add_to_queue(
+        job_id=job_id,
+        input_path=input_path,
+        output_path=output_path,
+        profile=profile
+    )
+    
+    console.print(f"\n[green][OK][/green] Job adicionado à fila")
+    
+    if queue_was_empty:
+        options = ["Iniciar conversão agora", "Voltar ao menu"]
+        choice = menu.show_options(options, "Fila estava vazia - o que deseja fazer?")
+        if choice == 0:
+            queue_mgr.remove_from_queue(job_id)
+            process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
+    else:
+        console.print(f"[cyan]Jobs na fila: {queue_mgr.get_queue_length()}[/cyan]")
+        input("\nPressione Enter para continuar...")
 
 
-def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager):
+def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
     """CLI para pasta."""
     menu = Menu(console)
     
@@ -736,6 +822,8 @@ def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
     
     video_files = FileUtils.find_video_files(folder_path)
     
+    queue_was_empty = queue_mgr.get_queue_length() == 0
+    
     for video_file in video_files:
         output_path = PathUtils.generate_output_path(video_file, output_dir, suffix="-encoded")
         
@@ -754,7 +842,15 @@ def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
         )
     
     menu.print_success(f"{len(video_files)} job(s) adicionados à fila")
-    input("\nPressione Enter para continuar...")
+    
+    if queue_was_empty:
+        options = ["Iniciar conversão agora", "Voltar ao menu"]
+        choice = menu.show_options(options, "Fila estava vazia - o que deseja fazer?")
+        if choice == 0:
+            process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
+    else:
+        console.print(f"[cyan]Jobs na fila: {queue_mgr.get_queue_length()}[/cyan]")
+        input("\nPressione Enter para continuar...")
 
 
 def run_profile_manager_cli(menu: Menu, profile_mgr: ProfileManager):
