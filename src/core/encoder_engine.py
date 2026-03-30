@@ -1,11 +1,13 @@
 import threading
 import time
+import re
 from typing import Optional, Dict, Any, Callable
 from dataclasses import dataclass
 from enum import Enum
 
 from .ffmpeg_wrapper import FFmpegWrapper
 from .hw_monitor import HardwareMonitor
+from ..ui.realtime_monitor import RealTimeEncodingMonitor, FFmpegProgressParser
 
 
 class EncodingStatus(Enum):
@@ -39,10 +41,12 @@ class EncoderEngine:
         self,
         ffmpeg_wrapper: Optional[FFmpegWrapper] = None,
         hw_monitor: Optional[HardwareMonitor] = None,
+        realtime_monitor: Optional[RealTimeEncodingMonitor] = None,
         max_concurrent: int = 2
     ):
         self.ffmpeg = ffmpeg_wrapper or FFmpegWrapper()
         self.hw_monitor = hw_monitor or HardwareMonitor()
+        self.realtime_monitor = realtime_monitor or RealTimeEncodingMonitor()
         self.max_concurrent = max_concurrent
         
         self._jobs: Dict[str, EncodingJob] = {}
@@ -55,6 +59,7 @@ class EncoderEngine:
         
         self._progress_callbacks: list[Callable[[str, float], None]] = []
         self._status_callbacks: list[Callable[[str, EncodingStatus], None]] = []
+        self._encoding_stats_callbacks: list[Callable[[str, Dict[str, Any]], None]] = []
     
     def add_job(self, job: EncodingJob) -> str:
         """Adiciona job à fila."""
@@ -137,6 +142,10 @@ class EncoderEngine:
         """Adiciona callback para mudanças de status."""
         self._status_callbacks.append(callback)
     
+    def add_encoding_stats_callback(self, callback: Callable[[str, Dict[str, Any]], None]):
+        """Adiciona callback para estatísticas de encoding."""
+        self._encoding_stats_callbacks.append(callback)
+    
     def start(self):
         """Inicia executor de jobs."""
         if self._running:
@@ -157,6 +166,7 @@ class EncoderEngine:
             self.cancel_job(job_id)
         
         self.hw_monitor.stop()
+        self.realtime_monitor.stop()
         
         if self._executor_thread:
             self._executor_thread.join(timeout=5)
@@ -216,6 +226,20 @@ class EncoderEngine:
         """Executa job de encoding."""
         profile = job.profile
         
+        media_info = self.ffmpeg.get_media_info(job.input_path)
+        duration = self.ffmpeg.get_duration(media_info)
+        video_streams = self.ffmpeg.get_video_streams(media_info)
+        
+        self.realtime_monitor.start(
+            description=f"Encoding: {job.input_path}",
+            total_duration=duration,
+            input_file=job.input_path,
+            output_file=job.output_path
+        )
+        
+        parser = FFmpegProgressParser()
+        parser.set_duration(duration)
+        
         command = self.ffmpeg.build_encoding_command(
             input_path=job.input_path,
             output_path=job.output_path,
@@ -233,36 +257,43 @@ class EncoderEngine:
         )
         
         def progress_callback(output: str):
-            progress = self._parse_ffmpeg_progress(output)
-            if progress is not None:
-                job.progress = progress
-                for callback in self._progress_callbacks:
-                    callback(job.id, progress)
-        
-        return self.ffmpeg.run_encoding(command, callback=progress_callback)
-    
-    def _parse_ffmpeg_progress(self, output: str) -> Optional[float]:
-        """Extrai progresso do output do FFmpeg."""
-        import re
-        
-        time_match = re.search(r'time=(\d+):(\d+):(\d+)', output)
-        if time_match:
-            hours = int(time_match.group(1))
-            minutes = int(time_match.group(2))
-            seconds = int(time_match.group(3))
-            current_seconds = hours * 3600 + minutes * 60 + seconds
+            stats = parser.parse_line(output)
             
-            duration_match = re.search(r'Duration: (\d+):(\d+):(\d+)', output)
-            if duration_match:
-                hours = int(duration_match.group(1))
-                minutes = int(duration_match.group(2))
-                seconds = int(duration_match.group(3))
-                total_seconds = hours * 3600 + minutes * 60 + seconds
-                
-                if total_seconds > 0:
-                    return (current_seconds / total_seconds) * 100
+            if 'fps' in stats:
+                self.realtime_monitor.update_encoding_stats(fps=stats['fps'])
+            if 'speed' in stats:
+                self.realtime_monitor.update_encoding_stats(speed=stats['speed'])
+            if 'bitrate' in stats:
+                self.realtime_monitor.update_encoding_stats(bitrate=stats['bitrate'])
+            if 'current_time' in stats:
+                self.realtime_monitor.update_progress(
+                    progress=stats.get('progress', 0),
+                    current_time=stats['current_time']
+                )
+            
+            hw_stats = self.hw_monitor.get_stats()
+            self.realtime_monitor.update_hw_stats({
+                'gpu_util': hw_stats.gpu_util,
+                'gpu_temperature': hw_stats.gpu_temperature,
+                'gpu_memory_used': hw_stats.gpu_memory_used,
+                'gpu_memory_total': hw_stats.gpu_memory_total,
+                'cpu_util': hw_stats.cpu_util
+            })
+            
+            if 'progress' in stats:
+                job.progress = stats['progress']
+                for callback in self._progress_callbacks:
+                    callback(job.id, stats['progress'])
+            
+            if stats:
+                for callback in self._encoding_stats_callbacks:
+                    callback(job.id, stats)
         
-        return None
+        success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
+        
+        self.realtime_monitor.stop()
+        
+        return (success, error)
     
     def set_pause(self, paused: bool):
         """Pausa ou retoma todos os jobs."""

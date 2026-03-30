@@ -64,11 +64,23 @@ def main_menu():
         menu.clear()
         show_banner()
         
+        # Verificar status da fila
+        queue_count = queue_mgr.get_queue_length()
+        pending_jobs = len(job_mgr.get_pending_jobs())
+        running_jobs = len(job_mgr.get_running_jobs())
+        
+        # Atualizar status da fila
+        queue_count = queue_mgr.get_queue_length()
+        
+        queue_status = ""
+        if queue_count > 0:
+            queue_status = f" [yellow]({queue_count} jobs na fila)[/yellow]"
+        
         options = [
             {"description": "Codificar arquivo único", "shortcut": "1"},
             {"description": "Codificar pasta", "shortcut": "2"},
             {"description": "Modo Watch (monitorar pastas)", "shortcut": "3"},
-            {"description": "Ver fila de jobs", "shortcut": "4"},
+            {"description": f"Ver fila de jobs{queue_status}", "shortcut": "4"},
             {"description": "Gerenciar perfis", "shortcut": "5"},
             {"description": "Ver estatísticas", "shortcut": "6"},
             {"description": "Verificar instalação", "shortcut": "7"},
@@ -110,19 +122,12 @@ def main_menu():
             
             console.print("\n[yellow]Pressione Ctrl+C para parar[/yellow]\n")
             
+            from src.ui.realtime_monitor import RealTimeEncodingMonitor
             encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 2))
             hw_monitor = HardwareMonitor()
-            progress_display = ProgressDisplay(console)
             
             def on_progress(job_id: str, progress: float):
                 job_mgr.update_progress(job_id, progress)
-                hw_stats = hw_monitor.get_stats()
-                progress_display.set_hw_stats({
-                    'gpu_util': hw_stats.gpu_util,
-                    'gpu_temperature': hw_stats.gpu_temperature,
-                    'gpu_memory_used': hw_stats.gpu_memory_used,
-                    'cpu_util': hw_stats.cpu_util
-                })
             
             def map_encoding_to_job_status(encoding_status: EncodingStatus) -> JobStatus:
                 mapping = {
@@ -169,14 +174,6 @@ def main_menu():
             
             try:
                 while True:
-                    hw_stats = hw_monitor.get_stats()
-                    progress_display.set_hw_stats({
-                        'gpu_util': hw_stats.gpu_util,
-                        'gpu_temperature': hw_stats.gpu_temperature,
-                        'gpu_memory_used': hw_stats.gpu_memory_used,
-                        'cpu_util': hw_stats.cpu_util
-                    })
-                    
                     active_count = len(encoder.get_all_jobs())
                     max_concurrent = config.get('encoding.max_concurrent', 2)
                     
@@ -200,8 +197,9 @@ def main_menu():
                 hw_monitor.stop()
             
         elif choice == 3:
-            from src.ui.queue_menu import show_queue_submenu
-            show_queue_submenu(menu, queue_mgr, job_mgr)
+            from src.ui.queue_menu import QueueMenuUI
+            queue_ui = QueueMenuUI(console, queue_mgr, job_mgr)
+            queue_ui.show_submenu()
             
         elif choice == 4:
             while True:

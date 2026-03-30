@@ -38,6 +38,7 @@ class QueueMenuUI:
                     {"description": "Limpar fila completa", "shortcut": "3"},
                     {"description": "Remover job específico", "shortcut": "4"},
                     {"description": "Mover prioridade do job", "shortcut": "5"},
+                    {"description": "⚡ Processar fila agora", "shortcut": "6"},
                     {"description": "Voltar", "shortcut": "0"}
                 ]
             else:
@@ -71,6 +72,8 @@ class QueueMenuUI:
             elif choice == 4:
                 self._change_priority_submenu()
             elif choice == 5:
+                self._process_queue_with_monitor()
+            elif choice == 6:
                 break
     
     def _show_queue_table(self, queue: List[Dict[str, Any]]):
@@ -228,6 +231,81 @@ class QueueMenuUI:
         else:
             self.menu.print_error("Opção inválida")
             self.console.input("\nPressione Enter para continuar...")
+    
+    def _process_queue_with_monitor(self):
+        """Processa fila com monitor em tempo real."""
+        from ..core.encoder_engine import EncoderEngine, EncodingJob
+        from ..core.hw_monitor import HardwareMonitor
+        import time
+        
+        queue = self.queue_mgr.list_queue()
+        if not queue:
+            self.menu.print_info("Fila vazia")
+            return
+        
+        self.menu.clear()
+        self.console.print("[bold cyan]Iniciando processamento da fila com monitor em tempo real...[/bold cyan]\n")
+        
+        encoder = EncoderEngine(max_concurrent=1)
+        hw_monitor = HardwareMonitor()
+        
+        def on_progress(job_id: str, progress: float):
+            self.job_mgr.update_progress(job_id, progress)
+        
+        def map_encoding_to_job_status(encoding_status: 'EncodingStatus') -> 'JobStatus':
+            from ..core.encoder_engine import EncodingStatus
+            mapping = {
+                EncodingStatus.PENDING: JobStatus.PENDING,
+                EncodingStatus.RUNNING: JobStatus.RUNNING,
+                EncodingStatus.COMPLETED: JobStatus.COMPLETED,
+                EncodingStatus.FAILED: JobStatus.FAILED,
+                EncodingStatus.CANCELLED: JobStatus.CANCELLED,
+                EncodingStatus.PAUSED: JobStatus.PAUSED
+            }
+            return mapping.get(encoding_status, JobStatus.PENDING)
+        
+        def on_status(job_id: str, status: 'EncodingStatus'):
+            job_status = map_encoding_to_job_status(status)
+            self.job_mgr.update_job_status(job_id, job_status)
+        
+        encoder.add_progress_callback(on_progress)
+        encoder.add_status_callback(on_status)
+        encoder.start()
+        hw_monitor.start()
+        
+        try:
+            while True:
+                active_count = len(encoder.get_all_jobs())
+                max_concurrent = 1
+                
+                if active_count < max_concurrent:
+                    next_job = self.queue_mgr.get_next_job()
+                    if next_job:
+                        job = EncodingJob(
+                            id=next_job['job_id'],
+                            input_path=next_job['input_path'],
+                            output_path=next_job['output_path'],
+                            profile=next_job['profile']
+                        )
+                        encoder.add_job(job)
+                        self.queue_mgr.mark_job_started(next_job['job_id'])
+                        self.console.print(f"\n[cyan]Iniciando job: {next_job['job_id'][:8]}[/cyan]")
+                
+                queue_remaining = self.queue_mgr.list_queue()
+                pending_queue = [j for j in queue_remaining if not j.get('started_at')]
+                
+                if active_count == 0 and not pending_queue:
+                    self.console.print("\n[green]✓ Todos os jobs foram processados![/green]")
+                    break
+                
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.console.print("\n[yellow]Processamento interrompido pelo usuário[/yellow]")
+        finally:
+            encoder.stop()
+            hw_monitor.stop()
+        
+        self.console.input("\nPressione Enter para continuar...")
 
 
 def show_queue_submenu(menu: Menu, queue_mgr: QueueManager, job_mgr: JobManager):
