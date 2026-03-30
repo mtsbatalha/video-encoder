@@ -19,6 +19,7 @@ from .utils.path_utils import PathUtils
 from .utils.file_utils import FileUtils
 from .ui.menu import Menu
 from .ui.progress import ProgressDisplay
+from .ui.queue_menu import show_queue_submenu
 
 
 console = Console()
@@ -671,12 +672,8 @@ def run_interactive_mode(config: ConfigManager, profile_mgr: ProfileManager, job
         elif choice == 1:
             run_folder_mode_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         elif choice == 2:
-            queue = queue_mgr.list_queue()
-            if queue:
-                menu.show_jobs_table([{"id": q['job_id'], "input_path": q['input_path'], "profile_name": q['profile'].get('name', ''), "status": "queued", "progress": 0} for q in queue])
-            else:
-                menu.print_info("Fila vazia")
-            input("\nPressione Enter para continuar...")
+            from .ui.queue_menu import show_queue_submenu
+            show_queue_submenu(menu, queue_mgr, job_mgr)
         elif choice == 3:
             run_profile_manager_cli(menu, profile_mgr)
         elif choice == 4:
