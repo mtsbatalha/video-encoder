@@ -39,6 +39,306 @@ def show_banner():
     console.print(Panel(banner, border_style="magenta"))
 
 
+def run_single_file_cli_setup(config, profile_mgr, job_mgr, stats_mgr):
+    """Setup para codificação de arquivo único. Retorna (input_path, profile, output_path) ou (None, None, None) se cancelado."""
+    from src.ui.menu import Menu
+    from src.utils.path_utils import PathUtils
+    from src.utils.file_utils import FileUtils
+    from pathlib import Path
+    
+    console = Console()
+    menu = Menu(console)
+    
+    input_path = menu.ask("Caminho do arquivo de vídeo")
+    
+    video_extensions = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg'}
+    if not Path(input_path).exists():
+        menu.print_error(f"Arquivo não encontrado: {input_path}")
+        input("\nPressione Enter para continuar...")
+        return None, None, None
+    
+    if not Path(input_path).is_file():
+        menu.print_error(f"Não é um arquivo: {input_path}")
+        input("\nPressione Enter para continuar...")
+        return None, None, None
+    
+    ext = Path(input_path).suffix.lower()
+    if ext not in video_extensions:
+        menu.print_error(f"Extensão não suportada: {ext}")
+        input("\nPressione Enter para continuar...")
+        return None, None, None
+    
+    profiles = profile_mgr.list_profiles()
+    if not profiles:
+        menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
+        input("\nPressione Enter para continuar...")
+        return None, None, None
+    
+    profile_idx = menu.show_options([p['name'] for p in profiles], "Perfis disponíveis")
+    profile = profiles[profile_idx]
+    
+    output_dir = menu.ask("Diretório de output", default=str(Path(input_path).parent))
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    output_path = PathUtils.generate_output_path(input_path, output_dir, suffix="-encoded")
+    
+    return input_path, profile, output_path
+
+
+def _process_single_job_immediate(console, menu, config, job_mgr, stats_mgr, input_path, output_path, profile):
+    """Processa job único imediatamente com monitor em tempo real."""
+    from src.core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
+    from src.core.hw_monitor import HardwareMonitor
+    from src.core.ffmpeg_wrapper import FFmpegWrapper
+    import time
+    from pathlib import Path
+    
+    console.print("\n[bold]Iniciando codificação com monitor em tempo real...[/bold]\n")
+    
+    encoder = EncoderEngine(max_concurrent=1)
+    hw_monitor = HardwareMonitor()
+    
+    def on_progress(job_id: str, progress: float):
+        job_mgr.update_progress(job_id, progress)
+    
+    def map_encoding_to_job_status(encoding_status: EncodingStatus):
+        from src.managers.job_manager import JobStatus
+        mapping = {
+            EncodingStatus.PENDING: JobStatus.PENDING,
+            EncodingStatus.RUNNING: JobStatus.RUNNING,
+            EncodingStatus.COMPLETED: JobStatus.COMPLETED,
+            EncodingStatus.FAILED: JobStatus.FAILED,
+            EncodingStatus.CANCELLED: JobStatus.CANCELLED,
+            EncodingStatus.PAUSED: JobStatus.PAUSED
+        }
+        return mapping.get(encoding_status, JobStatus.PENDING)
+    
+    def on_status(job_id: str, status: EncodingStatus):
+        job_status = map_encoding_to_job_status(status)
+        job_mgr.update_job_status(job_id, job_status)
+        if status == EncodingStatus.COMPLETED:
+            job = job_mgr.get_job(job_id)
+            if job:
+                stats_mgr.record_encode(
+                    profile_id=profile.get('id', 'custom'),
+                    profile_name=profile.get('name', 'Custom'),
+                    success=True,
+                    duration_seconds=0,
+                    input_size=job.get('input_size', 0),
+                    output_size=job.get('output_size', 0)
+                )
+        elif status == EncodingStatus.FAILED:
+            job = job_mgr.get_job(job_id)
+            if job:
+                stats_mgr.record_encode(
+                    profile_id=profile.get('id', 'custom'),
+                    profile_name=profile.get('name', 'Custom'),
+                    success=False,
+                    duration_seconds=0,
+                    input_size=0,
+                    output_size=0,
+                    failure_reason=job.get('error_message', '')
+                )
+    
+    encoder.add_progress_callback(on_progress)
+    encoder.add_status_callback(on_status)
+    encoder.start()
+    hw_monitor.start()
+    
+    job_id = job_mgr.create_job(
+        input_path=input_path,
+        output_path=output_path,
+        profile_id=profile.get('id', 'custom'),
+        profile_name=profile.get('name', 'Custom')
+    )
+    
+    job = EncodingJob(
+        id=job_id,
+        input_path=input_path,
+        output_path=output_path,
+        profile=profile
+    )
+    encoder.add_job(job)
+    
+    try:
+        while True:
+            active_count = len(encoder.get_all_jobs())
+            
+            if active_count == 0:
+                console.print("\n[green]✓ Codificação completada![/green]")
+                break
+            
+            time.sleep(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Processamento interrompido[/yellow]")
+    finally:
+        encoder.stop()
+        hw_monitor.stop()
+    
+    console.input("\nPressione Enter para continuar...")
+
+
+def run_folder_mode_cli_setup(config, profile_mgr, job_mgr, queue_mgr):
+    """Setup para codificação de pasta. Retorna lista de arquivos ou None se cancelado."""
+    from src.ui.menu import Menu
+    from src.utils.path_utils import PathUtils
+    from src.utils.file_utils import FileUtils
+    from pathlib import Path
+    
+    console = Console()
+    menu = Menu(console)
+    
+    folder_path = menu.ask("Caminho da pasta")
+    
+    if not Path(folder_path).exists():
+        menu.print_error(f"Pasta não encontrada: {folder_path}")
+        input("\nPressione Enter para continuar...")
+        return None
+    
+    if not Path(folder_path).is_dir():
+        menu.print_error(f"Não é uma pasta: {folder_path}")
+        input("\nPressione Enter para continuar...")
+        return None
+    
+    video_files = FileUtils.find_video_files(folder_path)
+    
+    if not video_files:
+        menu.print_error("Nenhum vídeo encontrado na pasta")
+        input("\nPressione Enter para continuar...")
+        return None
+    
+    profiles = profile_mgr.list_profiles()
+    if not profiles:
+        menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
+        input("\nPressione Enter para continuar...")
+        return None
+    
+    profile_idx = menu.show_options([p['name'] for p in profiles], "Perfis disponíveis")
+    profile = profiles[profile_idx]
+    
+    output_dir = menu.ask("Diretório de output", default=str(Path(folder_path) / "converted"))
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    for video_file in video_files:
+        output_path = PathUtils.generate_output_path(video_file, output_dir, suffix="-encoded")
+        
+        job_id = job_mgr.create_job(
+            input_path=video_file,
+            output_path=output_path,
+            profile_id=profile['id'],
+            profile_name=profile['name']
+        )
+        
+        queue_mgr.add_to_queue(
+            job_id=job_id,
+            input_path=video_file,
+            output_path=output_path,
+            profile=profile
+        )
+    
+    return video_files
+
+
+def _process_queue_immediate(console, menu, config, job_mgr, queue_mgr, stats_mgr):
+    """Processa fila imediatamente com monitor em tempo real."""
+    from src.core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
+    from src.core.hw_monitor import HardwareMonitor
+    import time
+    from pathlib import Path
+    
+    queue = queue_mgr.list_queue()
+    if not queue:
+        console.print("[yellow]Fila vazia[/yellow]")
+        console.input("Pressione Enter para continuar...")
+        return
+    
+    console.print(f"\n[bold]Processando {len(queue)} job(s) com monitor em tempo real...[/bold]\n")
+    
+    encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 1))
+    hw_monitor = HardwareMonitor()
+    
+    def on_progress(job_id: str, progress: float):
+        job_mgr.update_progress(job_id, progress)
+    
+    def map_encoding_to_job_status(encoding_status: EncodingStatus):
+        from src.managers.job_manager import JobStatus
+        mapping = {
+            EncodingStatus.PENDING: JobStatus.PENDING,
+            EncodingStatus.RUNNING: JobStatus.RUNNING,
+            EncodingStatus.COMPLETED: JobStatus.COMPLETED,
+            EncodingStatus.FAILED: JobStatus.FAILED,
+            EncodingStatus.CANCELLED: JobStatus.CANCELLED,
+            EncodingStatus.PAUSED: JobStatus.PAUSED
+        }
+        return mapping.get(encoding_status, JobStatus.PENDING)
+    
+    def on_status(job_id: str, status: EncodingStatus):
+        job_status = map_encoding_to_job_status(status)
+        job_mgr.update_job_status(job_id, job_status)
+        if status == EncodingStatus.COMPLETED:
+            job = job_mgr.get_job(job_id)
+            if job:
+                stats_mgr.record_encode(
+                    profile_id=job.get('profile_id', ''),
+                    profile_name=job.get('profile_name', ''),
+                    success=True,
+                    duration_seconds=0,
+                    input_size=job.get('input_size', 0),
+                    output_size=job.get('output_size', 0)
+                )
+        elif status == EncodingStatus.FAILED:
+            job = job_mgr.get_job(job_id)
+            if job:
+                stats_mgr.record_encode(
+                    profile_id=job.get('profile_id', ''),
+                    profile_name=job.get('profile_name', ''),
+                    success=False,
+                    duration_seconds=0,
+                    input_size=0,
+                    output_size=0,
+                    failure_reason=job.get('error_message', '')
+                )
+    
+    encoder.add_progress_callback(on_progress)
+    encoder.add_status_callback(on_status)
+    encoder.start()
+    hw_monitor.start()
+    
+    try:
+        while True:
+            active_count = len(encoder.get_all_jobs())
+            max_concurrent = config.get('encoding.max_concurrent', 1)
+            
+            if active_count < max_concurrent:
+                next_job = queue_mgr.get_next_job()
+                if next_job:
+                    job = EncodingJob(
+                        id=next_job['job_id'],
+                        input_path=next_job['input_path'],
+                        output_path=next_job['output_path'],
+                        profile=next_job['profile']
+                    )
+                    encoder.add_job(job)
+                    queue_mgr.mark_job_started(next_job['job_id'])
+                    console.print(f"\n[cyan]▶ Iniciando: {Path(next_job['input_path']).name}[/cyan]")
+            
+            queue_remaining = queue_mgr.list_queue()
+            pending_queue = [j for j in queue_remaining if not j.get('started_at')]
+            
+            if active_count == 0 and not pending_queue:
+                console.print("\n[bold green]✓ Todos os jobs foram processados![/bold green]")
+                break
+            
+            time.sleep(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Processamento interrompido[/yellow]")
+    finally:
+        encoder.stop()
+        hw_monitor.stop()
+    
+    console.input("\nPressione Enter para continuar...")
+
+
 def main_menu():
     """Exibe menu principal legado (compatibilidade)."""
     from src.ui.menu import Menu
@@ -96,12 +396,48 @@ def main_menu():
             console.print("  [cyan]python vigia_nvenc.py -f video.mkv -p \"Filmes 4K\"[/cyan]")
             console.print("  [cyan]python vigia_nvenc.py --help[/cyan]\n")
             
-            from src.cli import run_single_file_cli
-            run_single_file_cli(config, profile_mgr, job_mgr, stats_mgr)
+            input_path, profile, output_path = run_single_file_cli_setup(config, profile_mgr, job_mgr, stats_mgr)
+            
+            if input_path is None or profile is None or output_path is None:
+                continue
+            
+            console.print("\n[bold]Opções de processamento:[/bold]")
+            if menu.ask_confirm("Deseja iniciar a conversão agora?", default=True):
+                _process_single_job_immediate(
+                    console, menu, config, job_mgr, stats_mgr,
+                    input_path, output_path, profile
+                )
+            else:
+                from src.managers.queue_manager import QueueManager
+                job_id = job_mgr.create_job(
+                    input_path=input_path,
+                    output_path=output_path,
+                    profile_id=profile.get('id', 'custom'),
+                    profile_name=profile.get('name', 'Custom')
+                )
+                queue_mgr.add_to_queue(
+                    job_id=job_id,
+                    input_path=input_path,
+                    output_path=output_path,
+                    profile=profile
+                )
+                console.print(f"\n[green]✓ Job adicionado à fila![/green]")
+                console.input("Pressione Enter para continuar...")
             
         elif choice == 1:
-            from src.cli import run_folder_mode_cli
-            run_folder_mode_cli(config, profile_mgr, job_mgr, queue_mgr)
+            files_info = run_folder_mode_cli_setup(config, profile_mgr, job_mgr, queue_mgr)
+            
+            if files_info is None or len(files_info) == 0:
+                continue
+            
+            console.print(f"\n[bold]{len(files_info)} arquivo(s) adicionado(s) à fila[/bold]")
+            if menu.ask_confirm("Deseja iniciar o processamento agora?", default=True):
+                _process_queue_immediate(
+                    console, menu, config, job_mgr, queue_mgr, stats_mgr
+                )
+            else:
+                console.print(f"\n[yellow]Jobs adicionados à fila. Processe depois em 'Ver fila de jobs'.[/yellow]")
+                console.input("Pressione Enter para continuar...")
             
         elif choice == 2:
             console.print("\n[bold]Iniciando Modo Watch...[/bold]\n")
@@ -129,7 +465,8 @@ def main_menu():
             def on_progress(job_id: str, progress: float):
                 job_mgr.update_progress(job_id, progress)
             
-            def map_encoding_to_job_status(encoding_status: EncodingStatus) -> JobStatus:
+            def map_encoding_to_job_status(encoding_status: EncodingStatus):
+                from src.managers.job_manager import JobStatus
                 mapping = {
                     EncodingStatus.PENDING: JobStatus.PENDING,
                     EncodingStatus.RUNNING: JobStatus.RUNNING,
@@ -197,9 +534,9 @@ def main_menu():
                 hw_monitor.stop()
             
         elif choice == 3:
-            from src.ui.queue_menu import QueueMenuUI
-            queue_ui = QueueMenuUI(console, queue_mgr, job_mgr)
-            queue_ui.show_submenu()
+            _process_queue_immediate(
+                console, menu, config, job_mgr, queue_mgr, stats_mgr
+            )
             
         elif choice == 4:
             while True:
@@ -266,6 +603,11 @@ def main_menu():
                     
                 elif profile_choice == 4:
                     break
+            
+        elif choice == 5:
+            summary = stats_mgr.get_summary()
+            menu.show_stats_panel(summary)
+            input("\nPressione Enter para continuar...")
             
         elif choice == 6:
             summary = stats_mgr.get_summary()

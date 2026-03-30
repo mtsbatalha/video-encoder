@@ -22,12 +22,35 @@ class QueueMenuUI:
     
     def show_submenu(self):
         """Exibe submenu de gerenciamento de fila."""
+        from rich.live import Live
+        from rich.panel import Panel
+        from rich.table import Table
+        import time
+        
+        running_jobs = self.job_mgr.get_running_jobs()
+        
+        if running_jobs:
+            self._show_live_monitor_for_existing_jobs()
+        
         while True:
             self.menu.clear()
             self.menu.print_header("Gerenciador de Fila")
             
             queue = self.queue_mgr.list_queue()
             is_paused = self.queue_mgr.is_paused()
+            
+            running = self.job_mgr.get_running_jobs()
+            pending = self.job_mgr.get_pending_jobs()
+            
+            if running:
+                self.console.print(f"[bold green]🔄 Jobs em execução: {len(running)}[/bold green]")
+                for job in running[:3]:
+                    progress = job.get('progress', 0)
+                    self.console.print(f"  • {job['id'][:8]}: {progress:.1f}%")
+                self.console.print()
+            elif pending and queue:
+                self.console.print(f"[bold yellow]⏳ Jobs pendentes: {len(pending)}[/bold yellow]")
+                self.console.print()
             
             if queue:
                 self._show_queue_table(queue)
@@ -81,20 +104,53 @@ class QueueMenuUI:
         table = Table(title="Fila de Jobs", show_header=True, header_style="bold magenta")
         table.add_column("#", style="dim", width=4)
         table.add_column("Job ID", style="dim", width=10)
-        table.add_column("Input", style="cyan", width=40)
-        table.add_column("Output", style="green", width=30)
-        table.add_column("Perfil", style="blue", width=15)
+        table.add_column("Input", style="cyan", width=35)
+        table.add_column("Output", style="green", width=25)
+        table.add_column("Perfil", style="blue", width=12)
+        table.add_column("Status", style="white", width=12)
+        table.add_column("Prog.", style="white", width=8)
         table.add_column("Prioridade", style="yellow", width=10)
         
         priorities = {1: 'LOW', 2: 'NORMAL', 3: 'HIGH', 4: 'CRITICAL'}
         
         for i, item in enumerate(queue, 1):
+            # Obter status do job
+            job_info = self.job_mgr.get_job(item['job_id'])
+            if job_info:
+                status = job_info.get('status', 'pending')
+                progress = job_info.get('progress', 0)
+            else:
+                status = 'queued'
+                progress = 0
+            
+            # Determinar cor e ícone do status
+            if status == 'running':
+                status_display = "[bold green]🔄 Execução[/bold green]"
+            elif status == 'completed':
+                status_display = "[green]✓ Completo[/green]"
+            elif status == 'failed':
+                status_display = "[red]✗ Falhou[/red]"
+            elif status == 'cancelled':
+                status_display = "[yellow]⊘ Cancelado[/yellow]"
+            elif status == 'paused':
+                status_display = "[yellow]⏸ Pausado[/yellow]"
+            else:
+                status_display = "[dim]⏳ Pendente[/dim]"
+            
+            # Formatar progresso
+            if status == 'running' or progress > 0:
+                progress_display = f"[cyan]{progress:.0f}%[/cyan]"
+            else:
+                progress_display = "[dim]--[/dim]"
+            
             table.add_row(
                 str(i),
                 item['job_id'][:8],
-                Path(item['input_path']).name[:38],
-                Path(item['output_path']).name[:28],
-                item['profile'].get('name', '')[:13],
+                Path(item['input_path']).name[:33],
+                Path(item['output_path']).name[:23],
+                item['profile'].get('name', '')[:10],
+                status_display,
+                progress_display,
                 priorities.get(item['priority'], 'NORMAL')
             )
         
@@ -234,7 +290,7 @@ class QueueMenuUI:
     
     def _process_queue_with_monitor(self):
         """Processa fila com monitor em tempo real."""
-        from ..core.encoder_engine import EncoderEngine, EncodingJob
+        from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
         from ..core.hw_monitor import HardwareMonitor
         import time
         
@@ -252,8 +308,7 @@ class QueueMenuUI:
         def on_progress(job_id: str, progress: float):
             self.job_mgr.update_progress(job_id, progress)
         
-        def map_encoding_to_job_status(encoding_status: 'EncodingStatus') -> 'JobStatus':
-            from ..core.encoder_engine import EncodingStatus
+        def map_encoding_to_job_status(encoding_status: EncodingStatus) -> JobStatus:
             mapping = {
                 EncodingStatus.PENDING: JobStatus.PENDING,
                 EncodingStatus.RUNNING: JobStatus.RUNNING,
@@ -264,7 +319,7 @@ class QueueMenuUI:
             }
             return mapping.get(encoding_status, JobStatus.PENDING)
         
-        def on_status(job_id: str, status: 'EncodingStatus'):
+        def on_status(job_id: str, status: EncodingStatus):
             job_status = map_encoding_to_job_status(status)
             self.job_mgr.update_job_status(job_id, job_status)
         
@@ -306,6 +361,86 @@ class QueueMenuUI:
             hw_monitor.stop()
         
         self.console.input("\nPressione Enter para continuar...")
+    
+    def _show_live_monitor_for_existing_jobs(self):
+        """Mostra monitor em tempo real para jobs já em execução."""
+        from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
+        from ..core.hw_monitor import HardwareMonitor
+        from ..ui.realtime_monitor import RealTimeEncodingMonitor, FFmpegProgressParser
+        from ..core.ffmpeg_wrapper import FFmpegWrapper
+        import time
+        
+        self.menu.clear()
+        self.console.print("[bold cyan]Verificando jobs em execução...[/bold cyan]\n")
+        
+        running_jobs = self.job_mgr.get_running_jobs()
+        if not running_jobs:
+            return
+        
+        self.console.print(f"[green]Encontrados {len(running_jobs)} job(s) em execução[/green]\n")
+        
+        for job in running_jobs:
+            self.console.print(f"Job: {job['id'][:8]}")
+            self.console.print(f"  Input: {Path(job['input_path']).name}")
+            self.console.print(f"  Progresso: {job.get('progress', 0):.1f}%")
+            self.console.print()
+        
+        if self.menu.ask_confirm("Deseja monitorar o progresso destes jobs?", default=True):
+            encoder = EncoderEngine(max_concurrent=1)
+            hw_monitor = HardwareMonitor()
+            
+            def on_progress(job_id: str, progress: float):
+                self.job_mgr.update_progress(job_id, progress)
+            
+            def map_encoding_to_job_status(encoding_status: EncodingStatus) -> JobStatus:
+                mapping = {
+                    EncodingStatus.PENDING: JobStatus.PENDING,
+                    EncodingStatus.RUNNING: JobStatus.RUNNING,
+                    EncodingStatus.COMPLETED: JobStatus.COMPLETED,
+                    EncodingStatus.FAILED: JobStatus.FAILED,
+                    EncodingStatus.CANCELLED: JobStatus.CANCELLED,
+                    EncodingStatus.PAUSED: JobStatus.PAUSED
+                }
+                return mapping.get(encoding_status, JobStatus.PENDING)
+            
+            def on_status(job_id: str, status: EncodingStatus):
+                job_status = map_encoding_to_job_status(status)
+                self.job_mgr.update_job_status(job_id, job_status)
+            
+            encoder.add_progress_callback(on_progress)
+            encoder.add_status_callback(on_status)
+            encoder.start()
+            hw_monitor.start()
+            
+            try:
+                while True:
+                    active_count = len(encoder.get_all_jobs())
+                    
+                    if active_count < 1:
+                        next_job = self.queue_mgr.get_next_job()
+                        if next_job:
+                            job = EncodingJob(
+                                id=next_job['job_id'],
+                                input_path=next_job['input_path'],
+                                output_path=next_job['output_path'],
+                                profile=next_job['profile']
+                            )
+                            encoder.add_job(job)
+                            self.queue_mgr.mark_job_started(next_job['job_id'])
+                    
+                    queue_remaining = self.queue_mgr.list_queue()
+                    pending_queue = [j for j in queue_remaining if not j.get('started_at')]
+                    
+                    if active_count == 0 and not pending_queue:
+                        self.console.print("\n[green]✓ Todos os jobs foram processados![/green]")
+                        break
+                    
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                self.console.print("\n[yellow]Monitoramento interrompido[/yellow]")
+            finally:
+                encoder.stop()
+                hw_monitor.stop()
 
 
 def show_queue_submenu(menu: Menu, queue_mgr: QueueManager, job_mgr: JobManager):

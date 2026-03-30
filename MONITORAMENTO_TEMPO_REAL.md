@@ -21,15 +21,31 @@ O sistema agora possui uma interface de monitoramento em tempo real que mostra d
    python vigia_nvenc.py
    ```
 
-2. **Adicione jobs à fila:**
+2. **Para codificar um arquivo:**
    - Opção `1` - Codificar arquivo único
-   - Opção `2` - Codificar pasta (adiciona múltiplos vídeos à fila)
+   - Selecione o arquivo e o perfil
+   - **O sistema pergunta:** "Deseja iniciar a conversão agora?"
+     - **SIM (padrão):** Inicia processamento imediatamente com monitor em tempo real
+     - **NÃO:** Adiciona à fila para processamento posterior
 
-3. **Processe a fila com monitor em tempo real:**
+3. **Para codificar uma pasta:**
+   - Opção `2` - Codificar pasta
+   - Selecione a pasta e o perfil
+   - **O sistema pergunta:** "Deseja iniciar o processamento agora?"
+     - **SIM (padrão):** Processa todos os arquivos imediatamente com monitor
+     - **NÃO:** Adiciona todos à fila para processamento posterior
+
+4. **Para processar a fila:**
    - Opção `4` - Ver fila de jobs
-   - Opção `6` - ⚡ Processar fila agora
+   - **Processamento inicia AUTOMATICAMENTE** sem perguntar
+   - Mostra monitor em tempo real de todos os jobs
 
-   Isso iniciará o processamento com o monitor em tempo real visível.
+**Fluxo resumido:**
+- Arquivo único: Pergunta se quer iniciar agora (padrão: Sim)
+- Pasta: Pergunta se quer iniciar agora (padrão: Sim)  
+- Fila: Inicia automaticamente (sem perguntar)
+
+> **Nota:** O comportamento padrão é sempre iniciar o processamento imediatamente. Para apenas adicionar à fila sem processar, selecione "Não" quando perguntado.
 
 ### Método 2: Modo Watch (Processamento Contínuo)
 
