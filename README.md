@@ -106,13 +106,41 @@ python vigia_nvenc.py --queue-clear
 
 ## Perfis Incluídos
 
-| Perfil | Codec | CQ | Resolução | Descrição |
-|--------|-------|-----|-----------|-----------|
-| Filmes 4K HEVC | hevc_nvenc | 18 | Original | Alta qualidade 4K |
-| Series 1080p HEVC | hevc_nvenc | 24 | 1080p | Balanceado para series |
-| TV Antiga 720p H264 | h264_nvenc | 23 | 720p | Compatibilidade máxima |
-| Animação 1080p HEVC | hevc_nvenc | 20 | 1080p | Otimizado para cartoon |
-| AV1 4K Quality | av1_nvenc | 22 | Original |Codec AV1 eficiente |
+### Filmes (Qualidade Priorizada)
+
+| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|-----------|---------|-----------|
+| Filmes 4K HEVC | hevc_nvenc | 18 | Original | Não | Alta qualidade 4K, HDR preservado |
+| Filmes 4K H264 | h264_nvenc | 20 | Original | Sim | Compatibilidade máxima, HDR→SDR |
+| Filmes 1080p HEVC | hevc_nvenc | 20 | 1080p | Não | Qualidade balanceada, HDR preservado |
+| Filmes 1080p H264 | h264_nvenc | 21 | 1080p | Sim | Compatibilidade, HDR→SDR |
+| Filmes 720p HEVC | hevc_nvenc | 22 | 720p | Sim | Arquivos menores, HDR→SDR |
+| Filmes 720p H264 | h264_nvenc | 23 | 720p | Sim | TVs antigas, HDR→SDR |
+
+### Séries (Compressão Priorizada)
+
+| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|-----------|---------|-----------|
+| Series 4K HEVC | hevc_nvenc | 22 | Original | Não | Qualidade 4K, HDR preservado |
+| Series 4K H264 | h264_nvenc | 24 | Original | Sim | Compatibilidade, HDR→SDR |
+| Series 1080p HEVC | hevc_nvenc | 24 | 1080p | Não | Balanceado, HDR preservado |
+| Series 1080p H264 | h264_nvenc | 25 | 1080p | Sim | Compatibilidade, HDR→SDR |
+| Series 720p HEVC | hevc_nvenc | 26 | 720p | Sim | Arquivos leves, HDR→SDR |
+| Series 720p H264 | h264_nvenc | 27 | 720p | Sim | Máxima compressão, HDR→SDR |
+
+### Animação
+
+| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|-----------|---------|-----------|
+| Animação 1080p HEVC | hevc_nvenc | 18 | 1080p | Não | Otimizado para desenhos |
+| Animação 720p H264 | h264_nvenc | 20 | 720p | Sim | Compatibilidade |
+
+### Documentários
+
+| Perfil | Codec | CQ | Resolução | HDR→SDR | Descrição |
+|--------|-------|-----|-----------|---------|-----------|
+| Documentário 1080p HEVC | hevc_nvenc | 24 | 1080p | Não | Conteúdo estático |
+| Documentário 720p H264 | h264_nvenc | 26 | 720p | Sim | Compatibilidade |
 
 ## Configuração
 
