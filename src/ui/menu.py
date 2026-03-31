@@ -4,6 +4,7 @@ from rich.table import Table
 from rich.prompt import Prompt, IntPrompt, Confirm
 from rich.text import Text
 from typing import Optional, List, Dict, Any
+from ..managers.profile_manager import ProfileManager
 
 
 class Menu:
@@ -412,7 +413,7 @@ class Menu:
         choice = self.show_menu("Opções de Conversão", options)
         return choice
     
-    def show_advanced_profile_editor(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+    def show_advanced_profile_editor(self, profile: Dict[str, Any], profile_mgr: Optional['ProfileManager'] = None) -> Dict[str, Any]:
         """Exibe editor de perfil para configurações avançadas antes da conversão."""
         self.console.print()
         self.print_header("⚙️ Configurações Avançadas", "Editar perfil antes da conversão")
@@ -455,8 +456,9 @@ class Menu:
                 {"description": f"HDR para SDR: [{'green' if profile.get('hdr_to_sdr') else 'dim'}]{'Sim' if profile.get('hdr_to_sdr') else 'Não'}[/{'green' if profile.get('hdr_to_sdr') else 'dim'}]", "shortcut": "6"},
                 {"description": f"Deinterlace: [{'green' if profile.get('deinterlace') else 'dim'}]{'Sim' if profile.get('deinterlace') else 'Não'}[/{'green' if profile.get('deinterlace') else 'dim'}]", "shortcut": "7"},
                 {"description": f"Bitrate: [yellow]{profile.get('bitrate', '10M')}[/yellow]", "shortcut": "8"},
-                {"description": "✅ Concluir e voltar", "shortcut": "9"},
-                {"description": "❌ Cancelar edições", "shortcut": "10"}
+                {"description": "💾 Salvar como novo perfil", "shortcut": "9"},
+                {"description": "✅ Concluir e voltar", "shortcut": "10"},
+                {"description": "❌ Cancelar edições", "shortcut": "11"}
             ]
             
             choice = self.show_menu("Editar Configurações", edit_options)
@@ -507,11 +509,38 @@ class Menu:
                 profile['cq'] = None  # Limpa CQ quando bitrate é definido
                 self.print_success(f"Bitrate atualizado para: {bitrate} (CQ desativado)")
             
-            elif choice == 8:  # Concluir
+            elif choice == 8:  # Salvar como novo perfil
+                if profile_mgr:
+                    new_name = self.ask("Nome para o novo perfil:", default=f"{profile.get('name', 'Custom')} (cópia)")
+                    new_description = self.ask("Descrição para o novo perfil (opcional):", default=profile.get('description', ''))
+                    
+                    # Criar novo perfil com as configurações atuais
+                    new_profile_id = profile_mgr.create_profile(
+                        name=new_name,
+                        codec=profile.get('codec', 'hevc_nvenc'),
+                        cq=profile.get('cq'),
+                        bitrate=profile.get('bitrate'),
+                        preset=profile.get('preset', 'p5'),
+                        resolution=profile.get('resolution'),
+                        two_pass=profile.get('two_pass', False),
+                        hdr_to_sdr=profile.get('hdr_to_sdr', False),
+                        deinterlace=profile.get('deinterlace', False),
+                        plex_compatible=profile.get('plex_compatible', True),
+                        description=new_description
+                    )
+                    
+                    if new_profile_id:
+                        self.print_success(f"Novo perfil criado com sucesso: {new_name} (ID: {new_profile_id})")
+                    else:
+                        self.print_error("Erro ao criar novo perfil")
+                else:
+                    self.print_error("Gerenciador de perfis não disponível")
+            
+            elif choice == 9:  # Concluir
                 self.print_success("Configurações atualizadas!")
                 return profile
             
-            elif choice == 9:  # Cancelar
+            elif choice == 10:  # Cancelar
                 self.print_warning("Edições canceladas")
                 return profile
         

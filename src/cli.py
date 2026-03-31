@@ -959,7 +959,7 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
 
         elif action_choice == 2:  # ⚙️ Configurações avançadas
             # Abrir editor de perfil
-            profile = menu.show_advanced_profile_editor(profile)
+            profile = menu.show_advanced_profile_editor(profile, profile_mgr)
             # Atualizar codec e cq após edição
             codec = profile.get('codec', 'hevc_nvenc')
             cq = profile.get('cq')
@@ -1184,7 +1184,7 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
         
         elif action_choice == 2:  # ⚙️ Configurações avançadas
             # Abrir editor de perfil
-            profile = menu.show_advanced_profile_editor(profile)
+            profile = menu.show_advanced_profile_editor(profile, profile_mgr)
             # Atualizar codec e cq após edição
             codec = profile.get('codec', 'hevc_nvenc')
             cq = profile.get('cq')
