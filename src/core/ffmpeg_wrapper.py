@@ -170,7 +170,8 @@ class FFmpegWrapper:
     ) -> List[str]:
         """Constrói comando FFmpeg para encoding."""
         
-        cmd = [self.ffmpeg, '-y', '-i', input_path]
+        # ✅ FIX: Adiciona flags para output de progresso com newlines
+        cmd = [self.ffmpeg, '-y', '-progress', 'pipe:1', '-stats_period', '0.5', '-i', input_path]
         
         video_params = self.CODEC_MAP.get(codec, self.CODEC_MAP['hevc_nvenc'])
         
@@ -263,11 +264,11 @@ class FFmpegWrapper:
             print(f"🔍 DEBUG: Criando subprocess...")
             self._process = subprocess.Popen(
                 command,
-                stdin=subprocess.PIPE,  # ✅ DIAGNÓSTICO: Fornecer stdin explícito
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.PIPE,  # ✅ FIX: stderr separado para evitar mixing
                 text=True,
-                bufsize=1,
+                bufsize=0,  # ✅ FIX: Sem buffering para leitura imediata
                 universal_newlines=True
             )
             print(f"🔍 DEBUG: Subprocess criado com PID: {self._process.pid}")
@@ -311,54 +312,39 @@ class FFmpegWrapper:
                                         callback(line.strip())
                     break
                 
-                # ✅ DIAGNÓSTICO CRÍTICO: Verificar estado do stdout
-                print(f"🔧 DEBUG CRÍTICO: self._process = {self._process}")
-                print(f"🔧 DEBUG CRÍTICO: self._process.stdout = {self._process.stdout}")
-                print(f"🔧 DEBUG CRÍTICO: bool(self._process.stdout) = {bool(self._process.stdout if self._process else False)}")
-                
-                # ✅ DIAGNÓSTICO: Ler com timeout e buffer menor para capturar \r sem \n
+                # ✅ FIX: Leitura não-bloqueante do stdout
                 if self._process.stdout:
-                    print(f"✅ DEBUG: Entrando no bloco de leitura do stdout")
                     try:
-                        # Tentar ler com read() ao invés de readline() - captura \r também
+                        # Com -progress pipe:1, FFmpeg agora envia linhas com \n
+                        output = self._process.stdout.readline()
+                        if output:
+                            last_output_time = time_module.time()
+                            output_lines.append(output.strip())
+                            if callback:
+                                callback(output.strip())
+                        else:
+                            # Sem saída, aguarda brevemente
+                            time_module.sleep(0.05)
+                    except Exception as e:
+                        print(f"⚠️ Erro ao ler stdout: {type(e).__name__}: {e}")
+                        time_module.sleep(0.1)
+                
+                # Ler stderr também para capturar erros
+                if self._process.stderr:
+                    try:
+                        # Leitura não-bloqueante via polling
                         import select
                         import sys
                         
-                        # Windows não suporta select em pipes, usar readline com timeout simulado
-                        if sys.platform == 'win32':
-                            # Método alternativo para Windows: non-blocking read
-                            print(f"🔍 DEBUG: (Win32) Tentando ler linha do stdout...")
-                            output = self._process.stdout.readline()
-                            print(f"🔍 DEBUG: readline() retornou: {len(output) if output else 0} caracteres")
-                            
-                            # ✅ DIAGNÓSTICO: Mostrar representação dos caracteres especiais
-                            if output:
-                                print(f"🔍 DEBUG: Conteúdo raw (repr): {repr(output[:100])}")
-                                print(f"🔍 DEBUG: Contém \\r? {'SIM' if '\\r' in repr(output) else 'NÃO'}")
-                                print(f"🔍 DEBUG: Contém \\n? {'SIM' if '\\n' in repr(output) else 'NÃO'}")
-                                
-                                last_output_time = time_module.time()
-                                output_lines.append(output.strip())
-                                if callback:
-                                    callback(output.strip())
-                            else:
-                                # Sem saída disponível, espera um pouco antes de tentar novamente
-                                print(f"🔍 DEBUG: Nenhuma saída de readline(), aguardando 0.1s...")
-                                time_module.sleep(0.1)
-                        else:
-                            # Unix/Linux: pode usar select
-                            output = self._process.stdout.readline()
-                            if output:
-                                last_output_time = time_module.time()
-                                output_lines.append(output.strip())
-                                if callback:
-                                    callback(output.strip())
-                            else:
-                                time_module.sleep(0.1)
-                    except Exception as e:
-                        # Erro na leitura do pipe - continua tentando
-                        print(f"⚠️ DEBUG: Exceção ao ler stdout: {type(e).__name__}: {e}")
-                        time_module.sleep(0.1)
+                        # Check se há dados disponíveis para ler (Unix/Linux)
+                        if sys.platform != 'win32':
+                            ready, _, _ = select.select([self._process.stderr], [], [], 0)
+                            if ready:
+                                err_line = self._process.stderr.readline()
+                                if err_line:
+                                    output_lines.append(err_line.strip())
+                    except Exception:
+                        pass  # Silenciosamente ignora erros de stderr
                 
                 # Verifica timeout de inatividade (processo pode estar travado)
                 idle_time = time_module.time() - last_output_time
