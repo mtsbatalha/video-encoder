@@ -51,6 +51,7 @@ class EncoderEngine:
         
         self._jobs: Dict[str, EncodingJob] = {}
         self._active_jobs: Dict[str, EncodingJob] = {}
+        self._completed_jobs: Dict[str, EncodingJob] = {}
         self._lock = threading.Lock()
         self._executor_thread: Optional[threading.Thread] = None
         self._running = False
@@ -110,6 +111,7 @@ class EncoderEngine:
                 self.ffmpeg.terminate()
                 job.status = EncodingStatus.CANCELLED
                 job.completed_at = time.time()
+                self._completed_jobs[job_id] = job
                 del self._active_jobs[job_id]
                 for callback in self._status_callbacks:
                     callback(job_id, EncodingStatus.CANCELLED)
@@ -118,6 +120,7 @@ class EncoderEngine:
                 job = self._jobs[job_id]
                 job.status = EncodingStatus.CANCELLED
                 job.completed_at = time.time()
+                self._completed_jobs[job_id] = job
                 del self._jobs[job_id]
                 for callback in self._status_callbacks:
                     callback(job_id, EncodingStatus.CANCELLED)
@@ -127,12 +130,22 @@ class EncoderEngine:
     def get_job(self, job_id: str) -> Optional[EncodingJob]:
         """Retorna job por ID."""
         with self._lock:
-            return self._jobs.get(job_id) or self._active_jobs.get(job_id)
+            return self._jobs.get(job_id) or self._active_jobs.get(job_id) or self._completed_jobs.get(job_id)
     
     def get_all_jobs(self) -> Dict[str, EncodingJob]:
-        """Retorna todos os jobs."""
+        """Retorna todos os jobs (pendentes, ativos e completos)."""
         with self._lock:
-            return {**self._jobs, **self._active_jobs}
+            return {**self._jobs, **self._active_jobs, **self._completed_jobs}
+
+    def get_active_jobs(self) -> Dict[str, EncodingJob]:
+        """Retorna jobs atualmente em execução."""
+        with self._lock:
+            return dict(self._active_jobs)
+
+    def get_pending_jobs(self) -> Dict[str, EncodingJob]:
+        """Retorna jobs pendentes."""
+        with self._lock:
+            return {jid: j for jid, j in self._jobs.items() if j.status == EncodingStatus.PENDING}
     
     def add_progress_callback(self, callback: Callable[[str, float], None]):
         """Adiciona callback para atualizações de progresso."""
@@ -206,18 +219,16 @@ class EncoderEngine:
                 if job_id in self._active_jobs:
                     job = self._active_jobs[job_id]
                     job.completed_at = time.time()
-                    
+
                     if success:
                         job.status = EncodingStatus.COMPLETED
                         job.progress = 100.0
                     else:
                         job.status = EncodingStatus.FAILED
                         job.error_message = error
-                    
+
                     del self._active_jobs[job_id]
-                    
-                    if success:
-                        self._jobs[job_id] = job
+                    self._completed_jobs[job_id] = job
             
             for callback in self._status_callbacks:
                 callback(job_id, job.status)

@@ -395,20 +395,19 @@ def run_watch_mode(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: 
 
 def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
     """Processa a fila de jobs interativamente."""
-    queue = queue_mgr.list_queue()
-    
-    if not queue:
+    if queue_mgr.get_queue_length() == 0:
         console.print("[yellow][!][/yellow] Fila vazia")
         input("\nPressione Enter para continuar...")
         return
-    
-    console.print(f"\n[bold]Processando {len(queue)} job(s) da fila...[/bold]\n")
-    
+
+    console.print(f"\n[bold]Processando {queue_mgr.get_queue_length()} job(s) da fila...[/bold]\n")
+
+    from .core.encoder_engine import EncodingJob
     encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 2))
-    
+
     def on_progress(job_id: str, progress: float):
         job_mgr.update_progress(job_id, progress)
-    
+
     def on_status(job_id: str, status: EncodingStatus):
         job_status = map_encoding_to_job_status(status)
         job_mgr.update_job_status(job_id, job_status)
@@ -423,6 +422,9 @@ def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: Que
                     input_size=job.get('input_size', 0),
                     output_size=job.get('output_size', 0)
                 )
+                source_dir = str(Path(job['input_path']).parent)
+                output_dir = str(Path(job['output_path']).parent)
+                FileUtils.copy_subtitles_to_output(source_dir, output_dir, Path(job['input_path']).stem)
             queue_mgr.remove_from_queue(job_id)
         elif status == EncodingStatus.FAILED:
             job = job_mgr.get_job(job_id)
@@ -436,31 +438,41 @@ def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: Que
                     output_size=0,
                     failure_reason=job.get('error_message', '')
                 )
-    
+            queue_mgr.remove_from_queue(job_id)
+        elif status == EncodingStatus.CANCELLED:
+            queue_mgr.remove_from_queue(job_id)
+
     encoder.add_progress_callback(on_progress)
     encoder.add_status_callback(on_status)
-    
-    for item in queue:
-        job = job_mgr.get_job(item['job_id'])
-        if job:
-            from .core.encoder_engine import EncodingJob
-            encoding_job = EncodingJob(
-                id=item['job_id'],
-                input_path=item['input_path'],
-                output_path=item['output_path'],
-                profile=item['profile']
-            )
-            encoder.add_job(encoding_job)
-    
     encoder.start()
-    
+
     try:
-        while encoder._running and (encoder._jobs or encoder._active_jobs):
+        while True:
+            running_count = len(encoder.get_active_jobs())
+            pending_in_encoder = len(encoder.get_pending_jobs())
+
+            if (running_count + pending_in_encoder) < 1:
+                next_job = queue_mgr.pop_next_job()
+                if next_job:
+                    encoding_job = EncodingJob(
+                        id=next_job['job_id'],
+                        input_path=next_job['input_path'],
+                        output_path=next_job['output_path'],
+                        profile=next_job['profile']
+                    )
+                    encoder.add_job(encoding_job)
+                    console.print(f"[cyan]Iniciando job: {next_job['job_id'][:8]}[/cyan]")
+
+            queue_empty = queue_mgr.get_queue_length() == 0
+            if not running_count and not pending_in_encoder and queue_empty:
+                break
+
             time.sleep(1)
     except KeyboardInterrupt:
         console.print("\n[yellow]Parando processamento...[/yellow]")
+    finally:
         encoder.stop()
-    
+
     console.print("\n[green][OK][/green] Processamento da fila concluído")
     input("\nPressione Enter para continuar...")
 
@@ -494,13 +506,16 @@ def run_single_file(args, config: ConfigManager, profile_mgr: ProfileManager, jo
             'plex_compatible': True
         }
     
+    codec = profile.get('codec', 'hevc_nvenc')
+    cq = profile.get('cq')
+
     if args.output_file:
         output_path = PathUtils.normalize_path(args.output_file)
     elif args.output:
         ensure_directory(args.output)
-        output_path = PathUtils.generate_output_path(input_path, args.output, suffix="-encoded")
+        output_path = PathUtils.generate_output_path(input_path, args.output, codec=codec, cq=cq)
     else:
-        output_path = PathUtils.generate_output_path(input_path, str(Path(input_path).parent), suffix="-encoded")
+        output_path = PathUtils.generate_output_path(input_path, str(Path(input_path).parent), codec=codec, cq=cq)
     
     job_id = job_mgr.create_job(
         input_path=input_path,
@@ -625,52 +640,163 @@ def run_folder_mode(args, config: ConfigManager, profile_mgr: ProfileManager, jo
     
     output_dir = args.output or str(Path(folder_path) / "converted")
     ensure_directory(output_dir)
-    
+
+    codec = profile.get('codec', 'hevc_nvenc')
+    cq = profile.get('cq')
+
     for video_file in video_files:
-        output_path = PathUtils.generate_output_path(video_file, output_dir, suffix="-encoded")
-        
+        rel_path = Path(video_file).relative_to(folder_path)
+        rel_parent = rel_path.parent
+
+        if str(rel_parent) != '.':
+            folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
+            video_output_dir = str(Path(output_dir) / folder_name)
+        else:
+            video_output_dir = output_dir
+
+        ensure_directory(video_output_dir)
+        output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq)
+
         job_id = job_mgr.create_job(
             input_path=video_file,
             output_path=output_path,
             profile_id=args.profile,
             profile_name=profile['name']
         )
-        
+
         queue_mgr.add_to_queue(
             job_id=job_id,
             input_path=video_file,
             output_path=output_path,
             profile=profile
         )
-    
+
+        source_dir = str(Path(video_file).parent)
+        FileUtils.copy_subtitles_to_output(source_dir, video_output_dir, Path(video_file).stem)
+
     console.print(f"[green][OK][/green] {len(video_files)} job(s) adicionados à fila")
     console.print("\nUse [cyan]--queue[/cyan] para ver a fila")
     console.print("Use [cyan]--watch[/cyan] para processar a fila")
 
 
+def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
+    """Novo workflow de conversão por pasta com scan recursivo."""
+    menu = Menu(console)
+
+    input_folder = menu.ask("Pasta de entrada (input)")
+    valid, error = validate_directory_exists(input_folder)
+    if not valid:
+        menu.print_error(error)
+        input("\nPressione Enter para continuar...")
+        return
+
+    output_folder = menu.ask("Pasta de saída (output)")
+    ensure_directory(output_folder)
+
+    mode_options = ["Usar perfil existente", "Configuração manual"]
+    mode_choice = menu.show_options(mode_options, "Como deseja configurar a conversão?")
+
+    if mode_choice == 0:
+        profiles = profile_mgr.list_profiles()
+        if not profiles:
+            menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
+            input("\nPressione Enter para continuar...")
+            return
+        profile_idx = menu.show_options([p['name'] for p in profiles], "Perfis disponíveis")
+        profile = profiles[profile_idx]
+    else:
+        codec = menu.ask("Codec", default="hevc_nvenc")
+        cq = menu.ask("CQ (Constant Quality, 1-51)", default="24")
+        preset = menu.ask("Preset (p1-p7)", default="p5")
+        resolution = menu.ask("Resolução (vazio = original)", default="")
+        profile = {
+            'id': 'manual',
+            'name': f'Manual ({codec} CQ{cq})',
+            'codec': codec,
+            'cq': cq,
+            'preset': preset,
+            'resolution': resolution if resolution else None,
+            'two_pass': False,
+            'hdr_to_sdr': False,
+            'deinterlace': False,
+            'plex_compatible': True
+        }
+
+    codec = profile.get('codec', 'hevc_nvenc')
+    cq = profile.get('cq')
+
+    console.print(f"\n[cyan]Escaneando pasta recursivamente...[/cyan]")
+    video_files = FileUtils.find_video_files(input_folder, recursive=True)
+
+    if not video_files:
+        menu.print_warning("Nenhum vídeo encontrado na pasta")
+        input("\nPressione Enter para continuar...")
+        return
+
+    console.print(f"[green]Encontrados {len(video_files)} arquivo(s) de vídeo[/green]\n")
+
+    for video_file in video_files:
+        rel_path = Path(video_file).relative_to(input_folder)
+        rel_parent = rel_path.parent
+
+        if str(rel_parent) != '.':
+            folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
+            video_output_dir = str(Path(output_folder) / folder_name)
+        else:
+            root_name = Path(input_folder).name
+            folder_name = PathUtils.generate_output_dir_name(root_name, codec, cq)
+            video_output_dir = str(Path(output_folder) / folder_name)
+
+        ensure_directory(video_output_dir)
+        output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq)
+
+        job_id = job_mgr.create_job(
+            input_path=video_file,
+            output_path=output_path,
+            profile_id=profile.get('id', 'manual'),
+            profile_name=profile.get('name', 'Manual')
+        )
+
+        queue_mgr.add_to_queue(
+            job_id=job_id,
+            input_path=video_file,
+            output_path=output_path,
+            profile=profile
+        )
+
+        source_dir = str(Path(video_file).parent)
+        FileUtils.copy_subtitles_to_output(source_dir, video_output_dir, Path(video_file).stem)
+
+    menu.print_success(f"{len(video_files)} job(s) adicionados à fila")
+    console.print(f"[cyan]Legendas copiadas para os diretórios de saída[/cyan]")
+    console.print()
+
+    process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
+
+
 def run_interactive_mode(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
     """Executa modo interativo."""
     menu = Menu(console)
-    
+
     while True:
         menu.clear()
         menu.print_header("NVENC Encoder Pro v2.0", "Modo Interativo")
-        
+
         options = [
-            {"description": "Codificar arquivo único", "shortcut": "1"},
-            {"description": "Codificar pasta", "shortcut": "2"},
+            {"description": "Conversão de pasta (manual)", "shortcut": "1"},
+            {"description": "Codificar arquivo único", "shortcut": "2"},
             {"description": "Ver fila de jobs", "shortcut": "3"},
             {"description": "Gerenciar perfis", "shortcut": "4"},
             {"description": "Ver estatísticas", "shortcut": "5"},
-            {"description": "Sair", "shortcut": "0"}
+            {"description": "Sair", "shortcut": "6"}
         ]
-        
+
         choice = menu.show_menu("Menu Principal", options)
-        
+
         if choice == 0:
-            run_single_file_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
+            run_folder_conversion_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         elif choice == 1:
-            run_folder_mode_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
+            run_single_file_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         elif choice == 2:
             from .ui.queue_menu import show_queue_submenu
             show_queue_submenu(menu, queue_mgr, job_mgr)
@@ -762,8 +888,10 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
     
     output_dir = menu.ask("Diretório de output", default=str(Path(input_path).parent))
     ensure_directory(output_dir)
-    
-    output_path = PathUtils.generate_output_path(input_path, output_dir, suffix="-encoded")
+
+    codec = profile.get('codec', 'hevc_nvenc')
+    cq = profile.get('cq')
+    output_path = PathUtils.generate_output_path(input_path, output_dir, codec=codec, cq=cq)
     
     job_id = job_mgr.create_job(
         input_path=input_path,
@@ -787,7 +915,6 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
         options = ["Iniciar conversão agora", "Voltar ao menu"]
         choice = menu.show_options(options, "Fila estava vazia - o que deseja fazer?")
         if choice == 0:
-            queue_mgr.remove_from_queue(job_id)
             process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
     else:
         console.print(f"[cyan]Jobs na fila: {queue_mgr.get_queue_length()}[/cyan]")
@@ -797,15 +924,15 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
 def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
     """CLI para pasta."""
     menu = Menu(console)
-    
+
     folder_path = menu.ask("Caminho da pasta")
-    
+
     valid, error = validate_directory_exists(folder_path)
     if not valid:
         menu.print_error(error)
         input("\nPressione Enter para continuar...")
         return
-    
+
     profiles = profile_mgr.list_profiles()
     if not profiles:
         menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
@@ -813,33 +940,54 @@ def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
         return
     profile_idx = menu.show_options([p['name'] for p in profiles], "Perfis disponíveis")
     profile = profiles[profile_idx]
-    
+
     output_dir = menu.ask("Diretório de output", default=str(Path(folder_path) / "converted"))
     ensure_directory(output_dir)
-    
+
+    codec = profile.get('codec', 'hevc_nvenc')
+    cq = profile.get('cq')
+
     video_files = FileUtils.find_video_files(folder_path)
-    
+
+    if not video_files:
+        menu.print_warning("Nenhum vídeo encontrado na pasta")
+        input("\nPressione Enter para continuar...")
+        return
+
     queue_was_empty = queue_mgr.get_queue_length() == 0
-    
+
     for video_file in video_files:
-        output_path = PathUtils.generate_output_path(video_file, output_dir, suffix="-encoded")
-        
+        rel_path = Path(video_file).relative_to(folder_path)
+        rel_parent = rel_path.parent
+
+        if str(rel_parent) != '.':
+            folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
+            video_output_dir = str(Path(output_dir) / folder_name)
+        else:
+            video_output_dir = output_dir
+
+        ensure_directory(video_output_dir)
+        output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq)
+
         job_id = job_mgr.create_job(
             input_path=video_file,
             output_path=output_path,
             profile_id=profile['id'],
             profile_name=profile['name']
         )
-        
+
         queue_mgr.add_to_queue(
             job_id=job_id,
             input_path=video_file,
             output_path=output_path,
             profile=profile
         )
-    
+
+        source_dir = str(Path(video_file).parent)
+        FileUtils.copy_subtitles_to_output(source_dir, video_output_dir, Path(video_file).stem)
+
     menu.print_success(f"{len(video_files)} job(s) adicionados à fila")
-    
+
     if queue_was_empty:
         options = ["Iniciar conversão agora", "Voltar ao menu"]
         choice = menu.show_options(options, "Fila estava vazia - o que deseja fazer?")

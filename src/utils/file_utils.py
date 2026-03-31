@@ -10,6 +10,7 @@ class FileUtils:
     """Utilitários para manipulação de arquivos."""
     
     VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpeg', '.mpg', '.ts', '.mts', '.m2ts'}
+    SUBTITLE_EXTENSIONS = {'.srt', '.ass', '.sub', '.ssa', '.vtt', '.idx', '.sup'}
     
     @staticmethod
     def is_video_file(path: str) -> bool:
@@ -31,6 +32,32 @@ class FileUtils:
         
         return sorted([str(f) for f in video_files])
     
+    @staticmethod
+    def find_subtitle_files(directory: str) -> List[str]:
+        """Encontra todos os arquivos de legenda em um diretório (não recursivo)."""
+        subtitle_files: List[Path] = []
+        path = Path(directory)
+        for ext in FileUtils.SUBTITLE_EXTENSIONS:
+            subtitle_files.extend(path.glob(f"*{ext}"))
+        return sorted([str(f) for f in subtitle_files])
+
+    @staticmethod
+    def copy_subtitles_to_output(source_dir: str, output_dir: str, video_stem: Optional[str] = None) -> int:
+        """Copia arquivos de legenda do diretório de origem para o de saída.
+        Se video_stem for fornecido, copia apenas legendas que começam com esse stem.
+        Retorna o número de arquivos copiados."""
+        copied = 0
+        subtitles = FileUtils.find_subtitle_files(source_dir)
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        for sub_file in subtitles:
+            sub_path = Path(sub_file)
+            if video_stem and not sub_path.stem.startswith(video_stem):
+                continue
+            dest = Path(output_dir) / sub_path.name
+            if FileUtils.safe_copy(sub_file, str(dest)):
+                copied += 1
+        return copied
+
     @staticmethod
     def calculate_hash(path: str, algorithm: str = 'sha256') -> Optional[str]:
         """Calcula hash do arquivo."""

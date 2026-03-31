@@ -1,9 +1,11 @@
 """Monitor de encoding em tempo real com interface completa."""
 
 from rich.console import Console
+from rich.console import Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 from typing import Optional, Dict, Any
 import threading
 import time
@@ -43,7 +45,7 @@ class RealTimeEncodingMonitor:
         self._input_file: str = ""
         self._output_file: str = ""
     
-    def start(self, description: str = "Encoding", total_duration: float = 0, 
+    def start(self, description: str = "Encoding", total_duration: float = 0,
               input_file: str = "", output_file: str = ""):
         """Inicia monitor em tempo real."""
         self._running = True
@@ -52,7 +54,7 @@ class RealTimeEncodingMonitor:
         self._start_time = time.time()
         self._input_file = input_file
         self._output_file = output_file
-        
+
         self._live = Live(
             self._generate_display(),
             console=self.console,
@@ -60,12 +62,27 @@ class RealTimeEncodingMonitor:
             screen=False
         )
         self._live.start()
-    
+
+        self._refresh_thread = threading.Thread(target=self._refresh_loop, daemon=True)
+        self._refresh_thread.start()
+
+    def _refresh_loop(self):
+        """Atualiza o Live display periodicamente."""
+        while self._running and self._live:
+            try:
+                self._live.update(self._generate_display())
+            except Exception:
+                pass
+            time.sleep(0.5)
+
     def stop(self):
         """Para monitor."""
         self._running = False
         if self._live:
-            self._live.stop()
+            try:
+                self._live.stop()
+            except Exception:
+                pass
             self._live = None
     
     def update_progress(self, progress: float, current_time: float = 0):
@@ -156,28 +173,33 @@ class RealTimeEncodingMonitor:
             )
             
             # Informações dos arquivos
-            files_info = ""
+            files_parts = []
             if self._input_file:
-                files_info += f"[dim]Input: {self._input_file}[/dim]\n"
+                files_parts.append(Text.from_markup(f"[dim]Input: {self._input_file}[/dim]"))
             if self._output_file:
-                files_info += f"[dim]Output: {self._output_file}[/dim]"
-            
-            # Layout principal
-            content = f"""[bold white]{self._description}[/bold white]
-[dim]{self._status}[/dim]
+                files_parts.append(Text.from_markup(f"[dim]Output: {self._output_file}[/dim]"))
 
-{progress_bar}
+            # Layout principal usando Group para renderizar tabelas corretamente
+            renderables = [
+                Text.from_markup(f"[bold white]{self._description}[/bold white]"),
+                Text.from_markup(f"[dim]{self._status}[/dim]"),
+                Text(""),
+                Text.from_markup(progress_bar),
+                Text(""),
+                Text.from_markup("[bold cyan]⚡ Encoding Stats:[/bold cyan]"),
+                encoding_table,
+                Text(""),
+                Text.from_markup("[bold green]🖥️  Hardware:[/bold green]"),
+                hw_table,
+                Text(""),
+            ]
+            renderables.extend(files_parts)
 
-[bold cyan]⚡ Encoding Stats:[/bold cyan]
-{encoding_table}
-
-[bold green]🖥️  Hardware:[/bold green]
-{hw_table}
-
-{files_info}
-"""
-            
-            return Panel(content, border_style="magenta", title="🎬 NVENC Encoder - Tempo Real")
+            return Panel(
+                Group(*renderables),
+                border_style="magenta",
+                title="🎬 NVENC Encoder - Tempo Real"
+            )
     
     def _generate_progress_bar(self, percent: float, width: int = 50) -> str:
         """Gera barra de progresso ASCII."""

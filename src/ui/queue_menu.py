@@ -20,6 +20,21 @@ class QueueMenuUI:
         self.job_mgr = job_mgr
         self.menu = Menu(console)
     
+    def _get_status_display(self, status: str) -> str:
+        """Retorna a representação formatada do status para exibição."""
+        if status == 'running':
+            return "[bold green]🔄 Execução[/bold green]"
+        elif status == 'completed':
+            return "[green]✓ Completo[/green]"
+        elif status == 'failed':
+            return "[red]✗ Falhou[/red]"
+        elif status == 'cancelled':
+            return "[yellow]⊘ Cancelado[/yellow]"
+        elif status == 'paused':
+            return "[yellow]⏸ Pausado[/yellow]"
+        else:
+            return "[dim]⏳ Pendente[/dim]"
+    
     def show_submenu(self):
         """Exibe submenu de gerenciamento de fila."""
         from rich.live import Live
@@ -54,20 +69,20 @@ class QueueMenuUI:
             
             if queue:
                 self._show_queue_table(queue)
-                
+
                 options = [
                     {"description": "Ver detalhes da fila", "shortcut": "1"},
                     {"description": "Pausar fila" if not is_paused else "Retomar fila", "shortcut": "2"},
                     {"description": "Limpar fila completa", "shortcut": "3"},
                     {"description": "Remover job específico", "shortcut": "4"},
                     {"description": "Mover prioridade do job", "shortcut": "5"},
-                    {"description": "⚡ Processar fila agora", "shortcut": "6"},
-                    {"description": "Voltar", "shortcut": "0"}
+                    {"description": "Processar fila agora", "shortcut": "6"},
+                    {"description": "Voltar", "shortcut": "7"}
                 ]
             else:
                 self.menu.print_info("Fila vazia")
                 options = [
-                    {"description": "Voltar", "shortcut": "0"}
+                    {"description": "Voltar", "shortcut": "1"}
                 ]
             
             choice = self.menu.show_menu("Menu", options)
@@ -114,7 +129,6 @@ class QueueMenuUI:
         priorities = {1: 'LOW', 2: 'NORMAL', 3: 'HIGH', 4: 'CRITICAL'}
         
         for i, item in enumerate(queue, 1):
-            # Obter status do job
             job_info = self.job_mgr.get_job(item['job_id'])
             if job_info:
                 status = job_info.get('status', 'pending')
@@ -123,21 +137,8 @@ class QueueMenuUI:
                 status = 'queued'
                 progress = 0
             
-            # Determinar cor e ícone do status
-            if status == 'running':
-                status_display = "[bold green]🔄 Execução[/bold green]"
-            elif status == 'completed':
-                status_display = "[green]✓ Completo[/green]"
-            elif status == 'failed':
-                status_display = "[red]✗ Falhou[/red]"
-            elif status == 'cancelled':
-                status_display = "[yellow]⊘ Cancelado[/yellow]"
-            elif status == 'paused':
-                status_display = "[yellow]⏸ Pausado[/yellow]"
-            else:
-                status_display = "[dim]⏳ Pendente[/dim]"
+            status_display = self._get_status_display(status)
             
-            # Formatar progresso
             if status == 'running' or progress > 0:
                 progress_display = f"[cyan]{progress:.0f}%[/cyan]"
             else:
@@ -179,6 +180,9 @@ class QueueMenuUI:
     
     def _remove_job_submenu(self):
         """Submenu para remover job específico."""
+        from rich.panel import Panel
+        from datetime import datetime
+        
         queue = self.queue_mgr.list_queue()
         if not queue:
             self.menu.print_info("Fila vazia")
@@ -187,18 +191,30 @@ class QueueMenuUI:
         self.menu.clear()
         self.menu.print_header("Remover Job da Fila")
         
+        priorities = {1: 'LOW', 2: 'NORMAL', 3: 'HIGH', 4: 'CRITICAL'}
+        
         table = Table(title="Jobs na Fila", show_header=True, header_style="bold cyan")
         table.add_column("#", style="dim", width=4)
         table.add_column("Job ID", style="dim", width=10)
         table.add_column("Input", style="cyan")
         table.add_column("Perfil", style="green")
+        table.add_column("Status", style="white", width=15)
         
         for i, item in enumerate(queue, 1):
+            job_info = self.job_mgr.get_job(item['job_id'])
+            if job_info:
+                status = job_info.get('status', 'pending')
+            else:
+                status = 'queued'
+            
+            status_display = self._get_status_display(status)
+            
             table.add_row(
                 str(i),
                 item['job_id'][:8],
                 Path(item['input_path']).name[:40],
-                item['profile'].get('name', '')[:20]
+                item['profile'].get('name', '')[:20],
+                status_display
             )
         
         self.console.print(table)
@@ -216,7 +232,84 @@ class QueueMenuUI:
             job_to_remove = queue[choice - 1]
             job_id = job_to_remove['job_id']
             
-            if self.menu.ask_confirm(f"Remover job {job_id[:8]} da fila?"):
+            job_info = self.job_mgr.get_job(job_id)
+            
+            self.console.print()
+            content = Text()
+            content.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", style="dim")
+            content.append("DETALHES DO JOB SELECIONADO\n", style="bold yellow")
+            content.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n", style="dim")
+            
+            content.append("📋 Job ID: ", style="cyan")
+            content.append(f"{job_id}\n", style="white")
+            
+            content.append("📁 Input: ", style="cyan")
+            content.append(f"{Path(job_to_remove['input_path']).name}\n", style="white")
+            
+            content.append("💾 Output: ", style="cyan")
+            content.append(f"{Path(job_to_remove['output_path']).name}\n", style="white")
+            
+            content.append("🎬 Perfil: ", style="cyan")
+            content.append(f"{job_to_remove['profile'].get('name', 'N/A')}\n", style="white")
+            
+            if job_info:
+                status = job_info.get('status', 'pending')
+                progress = job_info.get('progress', 0)
+                content.append("📊 Status: ", style="cyan")
+                content.append(f"{self._get_status_display(status)}\n", style="white")
+                
+                content.append("📈 Progresso: ", style="cyan")
+                if status == 'running' or progress > 0:
+                    content.append(f"{progress:.1f}%\n", style="green")
+                else:
+                    content.append("Não iniciado\n", style="dim")
+                
+                created_at = job_info.get('created_at')
+                if created_at:
+                    try:
+                        dt = datetime.fromisoformat(created_at)
+                        content.append("🕐 Criado em: ", style="cyan")
+                        content.append(f"{dt.strftime('%d/%m/%Y %H:%M:%S')}\n", style="white")
+                    except Exception:
+                        pass
+                
+                started_at = job_info.get('started_at')
+                if started_at:
+                    try:
+                        dt = datetime.fromisoformat(started_at)
+                        content.append("▶️ Iniciado em: ", style="cyan")
+                        content.append(f"{dt.strftime('%d/%m/%Y %H:%M:%S')}\n", style="white")
+                    except Exception:
+                        pass
+                
+                completed_at = job_info.get('completed_at')
+                if completed_at:
+                    try:
+                        dt = datetime.fromisoformat(completed_at)
+                        content.append("✅ Concluído em: ", style="cyan")
+                        content.append(f"{dt.strftime('%d/%m/%Y %H:%M:%S')}\n", style="white")
+                    except Exception:
+                        pass
+                
+                error_message = job_info.get('error_message')
+                if error_message:
+                    content.append("❌ Erro: ", style="red")
+                    content.append(f"{error_message}\n", style="red")
+            else:
+                content.append("📊 Status: ", style="cyan")
+                content.append("Na fila (aguardando)\n", style="dim")
+            
+            priority_value = job_to_remove.get('priority', 2)
+            priority_name = priorities.get(priority_value, 'NORMAL')
+            content.append("\n🏷️ Prioridade: ", style="cyan")
+            content.append(f"{priority_name}\n", style="yellow")
+            
+            content.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", style="dim")
+            
+            self.console.print(Panel(content, border_style="yellow", title="[bold red]⚠ Job Selecionado para Remoção[/bold red]"))
+            self.console.print()
+            
+            if self.menu.ask_confirm(f"Confirma a remoção do job {job_id[:8]} da fila?"):
                 if self.queue_mgr.remove_from_queue(job_id):
                     self.job_mgr.update_job_status(job_id, JobStatus.CANCELLED)
                     self.menu.print_success("Job removido da fila")
@@ -323,18 +416,23 @@ class QueueMenuUI:
             job_status = map_encoding_to_job_status(status)
             self.job_mgr.update_job_status(job_id, job_status)
         
+        def on_status_queue(job_id: str, status: EncodingStatus):
+            on_status(job_id, status)
+            if status in (EncodingStatus.COMPLETED, EncodingStatus.FAILED, EncodingStatus.CANCELLED):
+                self.queue_mgr.remove_from_queue(job_id)
+
         encoder.add_progress_callback(on_progress)
-        encoder.add_status_callback(on_status)
+        encoder.add_status_callback(on_status_queue)
         encoder.start()
         hw_monitor.start()
-        
+
         try:
             while True:
-                active_count = len(encoder.get_all_jobs())
-                max_concurrent = 1
-                
-                if active_count < max_concurrent:
-                    next_job = self.queue_mgr.get_next_job()
+                running_count = len(encoder.get_active_jobs())
+                pending_in_encoder = len(encoder.get_pending_jobs())
+
+                if (running_count + pending_in_encoder) < 1:
+                    next_job = self.queue_mgr.pop_next_job()
                     if next_job:
                         job = EncodingJob(
                             id=next_job['job_id'],
@@ -343,16 +441,13 @@ class QueueMenuUI:
                             profile=next_job['profile']
                         )
                         encoder.add_job(job)
-                        self.queue_mgr.mark_job_started(next_job['job_id'])
                         self.console.print(f"\n[cyan]Iniciando job: {next_job['job_id'][:8]}[/cyan]")
-                
-                queue_remaining = self.queue_mgr.list_queue()
-                pending_queue = [j for j in queue_remaining if not j.get('started_at')]
-                
-                if active_count == 0 and not pending_queue:
-                    self.console.print("\n[green]✓ Todos os jobs foram processados![/green]")
+
+                queue_empty = self.queue_mgr.get_queue_length() == 0
+                if not running_count and not pending_in_encoder and queue_empty:
+                    self.console.print("\n[green]Todos os jobs foram processados![/green]")
                     break
-                
+
                 time.sleep(1)
         except KeyboardInterrupt:
             self.console.print("\n[yellow]Processamento interrompido pelo usuário[/yellow]")
@@ -407,17 +502,23 @@ class QueueMenuUI:
                 job_status = map_encoding_to_job_status(status)
                 self.job_mgr.update_job_status(job_id, job_status)
             
+            def on_status_queue(job_id: str, status: EncodingStatus):
+                on_status(job_id, status)
+                if status in (EncodingStatus.COMPLETED, EncodingStatus.FAILED, EncodingStatus.CANCELLED):
+                    self.queue_mgr.remove_from_queue(job_id)
+
             encoder.add_progress_callback(on_progress)
-            encoder.add_status_callback(on_status)
+            encoder.add_status_callback(on_status_queue)
             encoder.start()
             hw_monitor.start()
-            
+
             try:
                 while True:
-                    active_count = len(encoder.get_all_jobs())
-                    
-                    if active_count < 1:
-                        next_job = self.queue_mgr.get_next_job()
+                    running_count = len(encoder.get_active_jobs())
+                    pending_in_encoder = len(encoder.get_pending_jobs())
+
+                    if (running_count + pending_in_encoder) < 1:
+                        next_job = self.queue_mgr.pop_next_job()
                         if next_job:
                             job = EncodingJob(
                                 id=next_job['job_id'],
@@ -426,15 +527,12 @@ class QueueMenuUI:
                                 profile=next_job['profile']
                             )
                             encoder.add_job(job)
-                            self.queue_mgr.mark_job_started(next_job['job_id'])
-                    
-                    queue_remaining = self.queue_mgr.list_queue()
-                    pending_queue = [j for j in queue_remaining if not j.get('started_at')]
-                    
-                    if active_count == 0 and not pending_queue:
-                        self.console.print("\n[green]✓ Todos os jobs foram processados![/green]")
+
+                    queue_empty = self.queue_mgr.get_queue_length() == 0
+                    if not running_count and not pending_in_encoder and queue_empty:
+                        self.console.print("\n[green]Todos os jobs foram processados![/green]")
                         break
-                    
+
                     time.sleep(1)
             except KeyboardInterrupt:
                 self.console.print("\n[yellow]Monitoramento interrompido[/yellow]")

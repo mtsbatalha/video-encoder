@@ -86,32 +86,51 @@ class PathUtils:
         input_path: str,
         output_dir: str,
         suffix: Optional[str] = None,
-        extension: Optional[str] = None
+        extension: Optional[str] = None,
+        codec: Optional[str] = None,
+        cq: Optional[str] = None
     ) -> str:
-        """Gera caminho de output baseado no input."""
+        """Gera caminho de output baseado no input.
+        Se codec e cq forem fornecidos, gera sufixo automático _{codec}_cq{cq}."""
         input_path = PathUtils.normalize_path(input_path)
         input_file = Path(input_path)
-        
+
         stem = input_file.stem
         ext = extension or input_file.suffix
-        
+
+        if suffix is None and codec:
+            suffix = f"_{codec}"
+            if cq:
+                suffix += f"_cq{cq}"
+
         if suffix:
             output_filename = f"{stem}{suffix}{ext}"
         else:
             output_filename = f"{stem}{ext}"
-        
+
         output_filename = PathUtils.get_safe_filename(output_filename)
-        
+
         output_path = Path(output_dir) / output_filename
-        
+
         counter = 1
         while output_path.exists():
             output_filename = f"{stem}{suffix or ''}_{counter}{ext}"
             output_filename = PathUtils.get_safe_filename(output_filename)
             output_path = Path(output_dir) / output_filename
             counter += 1
-        
+
         return str(output_path)
+
+    @staticmethod
+    def generate_output_dir_name(
+        folder_name: str,
+        codec: str,
+        cq: Optional[str] = None
+    ) -> str:
+        """Gera nome de pasta de saída com codec e CQ."""
+        if cq:
+            return f"{folder_name}_{codec}_cq{cq}"
+        return f"{folder_name}_{codec}"
     
     @staticmethod
     def get_relative_path(path: str, base: str) -> str:
