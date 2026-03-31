@@ -263,6 +263,7 @@ class FFmpegWrapper:
         try:
             print(f"🔍 DEBUG: Criando subprocess...")
             import os
+            import sys
             # ✅ FIX: No Windows/WSL, define variável ambiente para forçar line buffering
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
@@ -278,7 +279,17 @@ class FFmpegWrapper:
                 env=env
             )
             print(f"🔍 DEBUG: Subprocess criado com PID: {self._process.pid}")
-            print(f"🔍 DEBUG: stdin=DEVNULL, stdout=PIPE, stderr=STDOUT")
+            
+            # ✅ FIX CRÍTICO: Tornar stdout não-bloqueante (Linux/WSL)
+            if sys.platform != 'win32' and self._process.stdout:
+                import fcntl
+                import os as os_module
+                fd = self._process.stdout.fileno()
+                flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, flags | os_module.O_NONBLOCK)
+                print(f"🔍 DEBUG: stdout configurado como NÃO-BLOQUEANTE")
+            
+            print(f"🔍 DEBUG: stdin=DEVNULL, stdout=PIPE (non-blocking), stderr=STDOUT")
             
             output_lines = []
             import time as time_module
@@ -311,46 +322,31 @@ class FFmpegWrapper:
                                         callback(line.strip())
                     break
                 
-                # ✅ FIX: Leitura linha por linha, decodificando incrementalmente
+                # ✅ FIX: Leitura não-bloqueante com acúmulo de buffer
                 if self._process.stdout:
                     try:
-                        # Lê bytes até encontrar \n ou \r
-                        line_bytes = b''
-                        while True:
-                            byte = self._process.stdout.read(1)
-                            if not byte:
-                                # Fim do stream ou sem dados
-                                if line_bytes:
-                                    # Processa linha parcial
-                                    try:
-                                        line = line_bytes.decode('utf-8', errors='ignore').strip()
-                                        if line:
-                                            last_output_time = time_module.time()
-                                            output_lines.append(line)
-                                            if callback:
-                                                callback(line)
-                                    except:
-                                        pass
-                                    line_bytes = b''
-                                time_module.sleep(0.05)
-                                break
+                        # Tenta ler até 4KB por vez (não-bloqueante agora)
+                        chunk = self._process.stdout.read(4096)
+                        if chunk:
+                            last_output_time = time_module.time()
+                            # Decodifica e processa linhas
+                            text = chunk.decode('utf-8', errors='ignore')
                             
-                            # Verifica se é \r ou \n (fim de linha)
-                            if byte in (b'\r', b'\n'):
-                                if line_bytes:
-                                    try:
-                                        line = line_bytes.decode('utf-8', errors='ignore').strip()
-                                        if line:
-                                            last_output_time = time_module.time()
-                                            output_lines.append(line)
-                                            if callback:
-                                                callback(line)
-                                    except:
-                                        pass
-                                    line_bytes = b''
-                                break  # Volta para o loop principal
-                            else:
-                                line_bytes += byte
+                            # Split por \r e \n - FFmpeg usa ambos
+                            lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+                            
+                            for line in lines:
+                                line = line.strip()
+                                if line:
+                                    output_lines.append(line)
+                                    if callback:
+                                        callback(line)
+                        else:
+                            # Sem dados disponíveis, aguarda um pouco
+                            time_module.sleep(0.1)
+                    except BlockingIOError:
+                        # Normal em non-blocking I/O quando não há dados
+                        time_module.sleep(0.1)
                     except Exception as e:
                         print(f"⚠️ Erro ao ler stdout: {type(e).__name__}: {e}")
                         time_module.sleep(0.1)
