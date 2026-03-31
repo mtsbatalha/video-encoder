@@ -235,6 +235,38 @@ class EncoderEngine:
     
     def _execute_job(self, job: EncodingJob) -> tuple[bool, str]:
         """Executa job de encoding."""
+        # DEBUG: Validar caminhos
+        print("\n" + "="*80)
+        print("DEBUG: Validando caminhos de arquivo")
+        print(f"  Input:  {job.input_path}")
+        print(f"  Output: {job.output_path}")
+        
+        from pathlib import Path
+        input_file = Path(job.input_path)
+        output_file = Path(job.output_path)
+        
+        if not input_file.exists():
+            error_msg = f"Arquivo de entrada não existe: {job.input_path}"
+            print(f"DEBUG ERROR: {error_msg}")
+            return (False, error_msg)
+        
+        if not input_file.is_file():
+            error_msg = f"Caminho de entrada não é um arquivo: {job.input_path}"
+            print(f"DEBUG ERROR: {error_msg}")
+            return (False, error_msg)
+        
+        # Criar diretório de saída se não existir
+        try:
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            print(f"DEBUG: Diretório de saída verificado/criado: {output_file.parent}")
+        except Exception as e:
+            error_msg = f"Erro ao criar diretório de saída: {e}"
+            print(f"DEBUG ERROR: {error_msg}")
+            return (False, error_msg)
+        
+        print("DEBUG: Validação de caminhos OK")
+        print("="*80 + "\n")
+        
         profile = job.profile
         
         media_info = self.ffmpeg.get_media_info(job.input_path)

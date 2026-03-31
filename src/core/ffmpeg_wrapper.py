@@ -261,8 +261,17 @@ class FFmpegWrapper:
         callback: Optional[Callable[[str], None]] = None
     ) -> tuple[bool, str]:
         """Executa comando de encoding."""
+        # DEBUG: Log dompeg completo
+        print("\n" + "="*80)
+        print("DEBUG: Comando FFmpeg que será executado:")
+        print(" ".join(command))
+        print("="*80 + "\n")
+        
         with self._lock:
             try:
+                # DEBUG: Antes de criar o processo
+                print(f"DEBUG: Criando processo FFmpeg...")
+                
                 self._process = subprocess.Popen(
                     command,
                     stdout=subprocess.PIPE,
@@ -270,33 +279,55 @@ class FFmpegWrapper:
                     text=True
                 )
                 
+                # DEBUG: Processo criado
+                print(f"DEBUG: Processo criado com PID: {self._process.pid}")
+                
                 stderr_output = []
+                line_count = 0
                 
                 while True:
                     if self._process.stderr is None:
+                        print("DEBUG: stderr é None, encerrando leitura")
                         break
                     output = self._process.stderr.readline()
                     if output == '' and self._process.poll() is not None:
+                        print(f"DEBUG: Fim do output. Poll retornou: {self._process.poll()}")
                         break
                     if output:
+                        line_count += 1
                         stderr_output.append(output.strip())
+                        # DEBUG: Mostrar primeiras 5 linhas de output
+                        if line_count <= 5:
+                            print(f"DEBUG [FFmpeg linha {line_count}]: {output.strip()[:100]}")
                         if callback:
                             callback(output.strip())
+                
+                print(f"DEBUG: Total de linhas lidas do FFmpeg: {line_count}")
                 
                 returncode = self._process.wait(timeout=timeout)
                 self._process = None
                 
+                # DEBUG: Código de retorno
+                print(f"DEBUG: FFmpeg returncode: {returncode}")
+                print(f"DEBUG: Total stderr lines: {len(stderr_output)}")
+                
                 if returncode == 0:
+                    print("DEBUG: Encoding SUCESSO")
                     return (True, 'Encoding completed successfully')
                 else:
-                    return (False, '\n'.join(stderr_output[-10:]))
+                    error_msg = '\n'.join(stderr_output[-10:])
+                    print(f"DEBUG: Encoding FALHOU. Últimas 10 linhas stderr:")
+                    print(error_msg)
+                    return (False, error_msg)
                     
             except subprocess.TimeoutExpired:
+                print("DEBUG: TIMEOUT no encoding")
                 if self._process:
                     self._process.terminate()
                 self._process = None
                 return (False, 'Encoding timeout')
             except Exception as e:
+                print(f"DEBUG: EXCEÇÃO no encoding: {type(e).__name__}: {e}")
                 self._process = None
                 return (False, str(e))
     
