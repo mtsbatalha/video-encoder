@@ -19,3 +19,4 @@ jobs/
 config.json
 nul
 .kilo/
+.claude/
