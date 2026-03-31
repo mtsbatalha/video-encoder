@@ -187,10 +187,12 @@ class EncoderEngine:
     
     def _executor_loop(self):
         """Loop principal do executor."""
+        print(f"🔍 DEBUG: Executor loop iniciado")
         while self._running:
             self._pause_event.wait()
             
             with self._lock:
+                print(f"🔍 DEBUG: Active jobs: {len(self._active_jobs)}, Max concurrent: {self.max_concurrent}")
                 if len(self._active_jobs) >= self.max_concurrent:
                     time.sleep(1)
                     continue
@@ -200,19 +202,23 @@ class EncoderEngine:
                     if job.status == EncodingStatus.PENDING
                 ]
                 
+                print(f"🔍 DEBUG: Pending jobs encontrados: {len(pending_jobs)}")
                 if not pending_jobs:
                     time.sleep(1)
                     continue
                 
                 job_id, job = pending_jobs[0]
+                print(f"🔍 DEBUG: Movendo job {job_id[:8]} para _active_jobs")
                 del self._jobs[job_id]
                 job.status = EncodingStatus.RUNNING
                 job.started_at = time.time()
                 self._active_jobs[job_id] = job
             
+            print(f"🔍 DEBUG: Chamando callbacks de status para job {job_id[:8]}")
             for callback in self._status_callbacks:
                 callback(job_id, EncodingStatus.RUNNING)
             
+            print(f"🔍 DEBUG: Iniciando execução do job {job_id[:8]}")
             success, error = self._execute_job(job)
             
             with self._lock:
@@ -236,26 +242,43 @@ class EncoderEngine:
     def _execute_job(self, job: EncodingJob) -> tuple[bool, str]:
         """Executa job de encoding."""
         from pathlib import Path
+        print(f"🔍 DEBUG: _execute_job chamado para job {job.id[:8]}")
+        print(f"🔍 DEBUG: Input: {job.input_path}")
+        print(f"🔍 DEBUG: Output: {job.output_path}")
+        
         input_file = Path(job.input_path)
         output_file = Path(job.output_path)
         
         if not input_file.exists():
-            return (False, f"Arquivo de entrada não existe: {job.input_path}")
+            error_msg = f"Arquivo de entrada não existe: {job.input_path}"
+            print(f"❌ DEBUG: {error_msg}")
+            return (False, error_msg)
         
         if not input_file.is_file():
-            return (False, f"Caminho de entrada não é um arquivo: {job.input_path}")
+            error_msg = f"Caminho de entrada não é um arquivo: {job.input_path}"
+            print(f"❌ DEBUG: {error_msg}")
+            return (False, error_msg)
+        
+        print(f"🔍 DEBUG: Arquivo de entrada validado OK")
         
         try:
             output_file.parent.mkdir(parents=True, exist_ok=True)
+            print(f"🔍 DEBUG: Diretório de saída criado: {output_file.parent}")
         except Exception as e:
-            return (False, f"Erro ao criar diretório de saída: {e}")
+            error_msg = f"Erro ao criar diretório de saída: {e}"
+            print(f"❌ DEBUG: {error_msg}")
+            return (False, error_msg)
         
         profile = job.profile
+        print(f"🔍 DEBUG: Profile: {profile.get('name', 'Unknown')}, Codec: {profile.get('codec', 'Unknown')}")
         
+        print(f"🔍 DEBUG: Obtendo media info...")
         media_info = self.ffmpeg.get_media_info(job.input_path)
         duration = self.ffmpeg.get_duration(media_info)
         video_streams = self.ffmpeg.get_video_streams(media_info)
+        print(f"🔍 DEBUG: Duration: {duration}s, Video streams: {len(video_streams)}")
         
+        print(f"🔍 DEBUG: Iniciando monitor de tempo real...")
         self.realtime_monitor.start(
             description=f"Encoding: {job.input_path}",
             total_duration=duration,
@@ -268,6 +291,7 @@ class EncoderEngine:
         parser = FFmpegProgressParser()
         parser.set_duration(duration)
         
+        print(f"🔍 DEBUG: Construindo comando FFmpeg...")
         command = self.ffmpeg.build_encoding_command(
             input_path=job.input_path,
             output_path=job.output_path,
@@ -283,8 +307,10 @@ class EncoderEngine:
             subtitle_burn=profile.get('subtitle_burn', False),
             plex_compatible=profile.get('plex_compatible', True)
         )
+        print(f"🔍 DEBUG: Comando FFmpeg: {' '.join(command)}")
         
         def progress_callback(output: str):
+            # print(f"🔍 DEBUG: FFmpeg output: {output}")  # Comentado para não poluir muito
             stats = parser.parse_line(output)
             
             if 'fps' in stats:
@@ -317,7 +343,10 @@ class EncoderEngine:
                 for callback in self._encoding_stats_callbacks:
                     callback(job.id, stats)
         
+        print(f"🔍 DEBUG: Executando comando FFmpeg...")
         success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
+        
+        print(f"🔍 DEBUG: Encoding finalizado - Success: {success}, Error: {error}")
         
         self.realtime_monitor.stop()
         

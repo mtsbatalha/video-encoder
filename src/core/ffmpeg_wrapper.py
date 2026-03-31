@@ -257,7 +257,10 @@ class FFmpegWrapper:
         callback: Optional[Callable[[str], None]] = None
     ) -> tuple[bool, str]:
         """Executa comando de encoding."""
+        print(f"🔍 DEBUG: FFmpegWrapper.run_encoding chamado")
+        print(f"🔍 DEBUG: Comando completo: {' '.join(command)}")
         try:
+            print(f"🔍 DEBUG: Criando subprocess...")
             self._process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
@@ -266,6 +269,7 @@ class FFmpegWrapper:
                 bufsize=1,
                 universal_newlines=True
             )
+            print(f"🔍 DEBUG: Subprocess criado com PID: {self._process.pid}")
             
             output_lines = []
             import time as time_module
@@ -307,13 +311,19 @@ class FFmpegWrapper:
             returncode = self._process.wait(timeout=5)
             self._process = None
             
+            print(f"🔍 DEBUG: FFmpeg processo finalizado com returncode: {returncode}")
+            
             if returncode == 0:
+                print(f"✅ DEBUG: Encoding completado com sucesso")
                 return (True, 'Encoding completed successfully')
             else:
                 error_msg = '\n'.join(output_lines[-20:])
+                print(f"❌ DEBUG: Encoding falhou. Últimas linhas de erro:")
+                print(error_msg)
                 return (False, error_msg)
                 
         except subprocess.TimeoutExpired:
+            print(f"❌ DEBUG: Timeout no processo FFmpeg")
             if self._process:
                 self._process.terminate()
                 try:
@@ -323,6 +333,9 @@ class FFmpegWrapper:
             self._process = None
             return (False, 'Encoding timeout')
         except Exception as e:
+            print(f"❌ DEBUG: Exceção capturada no run_encoding: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             if self._process:
                 try:
                     self._process.terminate()

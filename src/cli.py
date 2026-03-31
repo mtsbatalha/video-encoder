@@ -452,21 +452,31 @@ def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: Que
         while True:
             running_count = len(encoder.get_active_jobs())
             pending_in_encoder = len(encoder.get_pending_jobs())
+            queue_length = queue_mgr.get_queue_length()
+            
+            # 🔍 DEBUG LOG: Estado da fila
+            console.print(f"[dim]DEBUG: running={running_count}, pending_in_encoder={pending_in_encoder}, queue_length={queue_length}[/dim]")
 
             if (running_count + pending_in_encoder) < 1:
+                console.print(f"[dim]DEBUG: Tentando pegar próximo job da fila...[/dim]")
                 next_job = queue_mgr.pop_next_job()
                 if next_job:
+                    console.print(f"[dim]DEBUG: Job obtido: {next_job['job_id'][:8]}[/dim]")
                     encoding_job = EncodingJob(
                         id=next_job['job_id'],
                         input_path=next_job['input_path'],
                         output_path=next_job['output_path'],
                         profile=next_job['profile']
                     )
+                    console.print(f"[dim]DEBUG: Adicionando job ao encoder...[/dim]")
                     encoder.add_job(encoding_job)
                     console.print(f"[cyan]Iniciando job: {next_job['job_id'][:8]}[/cyan]")
+                else:
+                    console.print(f"[dim]DEBUG: Nenhum job na fila[/dim]")
 
             queue_empty = queue_mgr.get_queue_length() == 0
             if not running_count and not pending_in_encoder and queue_empty:
+                console.print(f"[dim]DEBUG: Todas as condições para parar foram atendidas - encerrando loop[/dim]")
                 break
 
             time.sleep(1)
