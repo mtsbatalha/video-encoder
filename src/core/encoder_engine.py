@@ -260,7 +260,9 @@ class EncoderEngine:
             description=f"Encoding: {job.input_path}",
             total_duration=duration,
             input_file=job.input_path,
-            output_file=job.output_path
+            output_file=job.output_path,
+            input_media_info=media_info,
+            profile=profile
         )
         
         parser = FFmpegProgressParser()

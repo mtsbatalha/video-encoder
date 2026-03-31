@@ -6,7 +6,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import threading
 import time
 import re
@@ -44,9 +44,16 @@ class RealTimeEncodingMonitor:
         self._current_time: float = 0
         self._input_file: str = ""
         self._output_file: str = ""
+        
+        # Informações detalhadas de mídia (entrada vs saída)
+        self._input_media_info: Dict[str, Any] = {}
+        self._output_media_info: Dict[str, Any] = {}
+        self._transcode_status: Dict[str, str] = {}  # 'video', 'audio', 'subtitle'
     
     def start(self, description: str = "Encoding", total_duration: float = 0,
-              input_file: str = "", output_file: str = ""):
+              input_file: str = "", output_file: str = "",
+              input_media_info: Optional[Dict[str, Any]] = None,
+              profile: Optional[Dict[str, Any]] = None):
         """Inicia monitor em tempo real."""
         self._running = True
         self._description = description
@@ -54,6 +61,12 @@ class RealTimeEncodingMonitor:
         self._start_time = time.time()
         self._input_file = input_file
         self._output_file = output_file
+        
+        # Processa informações de mídia de entrada
+        if input_media_info:
+            self._input_media_info = self._process_input_media_info(input_media_info)
+            self._output_media_info = self._generate_output_media_info(profile or {})
+            self._transcode_status = self._determine_transcode_status(profile or {})
 
         self._live = Live(
             self._generate_display(),
@@ -117,6 +130,340 @@ class RealTimeEncodingMonitor:
         with self._lock:
             self._status = status
     
+    def _process_input_media_info(self, media_info: Dict[str, Any]) -> Dict[str, Any]:
+        """Processa informações de mídia de entrada."""
+        streams = media_info.get('streams', [])
+        format_info = media_info.get('format', {})
+        
+        video_streams = [s for s in streams if s.get('codec_type') == 'video']
+        audio_streams = [s for s in streams if s.get('codec_type') == 'audio']
+        subtitle_streams = [s for s in streams if s.get('codec_type') == 'subtitle']
+        
+        # Calcula tamanho em MB
+        size_bytes = float(format_info.get('size', 0))
+        size_mb = size_bytes / (1024 * 1024) if size_bytes > 0 else 0
+        
+        # Calcula bitrate total
+        bitrate = float(format_info.get('bit_rate', 0))
+        
+        return {
+            'video': video_streams[0] if video_streams else None,
+            'audio': audio_streams,
+            'subtitle': subtitle_streams,
+            'format': format_info,
+            'duration': float(format_info.get('duration', 0)),
+            'size_mb': size_mb,
+            'bitrate': bitrate
+        }
+    
+    def _generate_output_media_info(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        """Gera informações de mídia de saída baseadas no profile."""
+        codec = profile.get('codec', 'hevc_nvenc')
+        
+        # Mapeamento de codecs para nomes amigáveis
+        codec_names = {
+            'hevc_nvenc': 'HEVC (NVENC)',
+            'h264_nvenc': 'H.264 (NVENC)',
+            'av1_nvenc': 'AV1 (NVENC)',
+            'hevc_amf': 'HEVC (AMF)',
+            'h264_amf': 'H.264 (AMF)',
+            'hevc_qsv': 'HEVC (QSV)',
+            'h264_qsv': 'H.264 (QSV)',
+            'libx265': 'HEVC (x265)',
+            'libx264': 'H.264 (x264)'
+        }
+        
+        # Determina codec de áudio de saída
+        audio_codec = 'AAC' if profile.get('audio_tracks') is not None or not profile.get('keep_audio', True) else 'Copy'
+        
+        # Determina codec de legenda de saída
+        subtitle_codec = 'Copy' if not profile.get('subtitle_burn', False) else 'Burned'
+        
+        # Calcula estimativa de tamanho de arquivo de saída
+        estimated_size_mb = self._estimate_output_size(profile)
+        
+        return {
+            'video': {'codec_name': codec_names.get(codec, codec)},
+            'audio': [{'codec_name': audio_codec}],
+            'subtitle': [{'codec_name': subtitle_codec}],
+            'profile': profile,
+            'estimated_size_mb': estimated_size_mb
+        }
+    
+    def _estimate_output_size(self, profile: Dict[str, Any]) -> float:
+        """Estima tamanho de arquivo de saída baseado em bitrate e duração."""
+        duration = self._input_media_info.get('duration', 0)
+        input_bitrate = self._input_media_info.get('bitrate', 0)
+        input_size_mb = self._input_media_info.get('size_mb', 0)
+        
+        if duration <= 0:
+            return 0
+        
+        # Fatores de compressão estimados por codec
+        compression_factors = {
+            'hevc_nvenc': 0.5,    # HEVC geralmente reduz para ~50% do tamanho original
+            'h264_nvenc': 0.7,    # H264 reduz para ~70%
+            'av1_nvenc': 0.4,     # AV1 é mais eficiente, ~40%
+            'hevc_amf': 0.5,
+            'h264_amf': 0.7,
+            'hevc_qsv': 0.5,
+            'h264_qsv': 0.7,
+            'libx265': 0.45,      # x265 software é mais eficiente
+            'libx264': 0.65
+        }
+        
+        codec = profile.get('codec', 'hevc_nvenc').lower()
+        
+        # Ajusta fator baseado no CQ/CRF se disponível
+        cq = profile.get('cq')
+        base_factor = compression_factors.get(codec, 0.5)
+        
+        if cq:
+            cq_value = int(cq) if cq.isdigit() else 20
+            # CQ menor = maior qualidade = maior arquivo
+            # CQ típico: 18-30 para HEVC
+            if codec in ['hevc_nvenc', 'hevc_amf', 'hevc_qsv', 'libx265']:
+                # HEVC: CQ 20 é ponto de referência
+                factor_adjustment = (25 - cq_value) * 0.05  # Cada ponto de CQ = ~5% de tamanho
+            elif codec in ['h264_nvenc', 'h264_amf', 'h264_qsv', 'libx264']:
+                # H264: CQ 23 é ponto de referência
+                factor_adjustment = (28 - cq_value) * 0.05
+            else:
+                factor_adjustment = 0
+            base_factor = max(0.2, min(0.9, base_factor + factor_adjustment))
+        
+        # Calcula tamanho estimado
+        estimated_size_mb = input_size_mb * base_factor
+        
+        # Se tiver bitrate de entrada, usa como referência alternativa
+        if input_bitrate > 0:
+            # Calcula bitrate de saída estimado
+            output_bitrate = input_bitrate * base_factor
+            
+            # Se profile tem bitrate definido, usa esse valor
+            if profile.get('bitrate'):
+                try:
+                    bitrate_str = profile['bitrate']
+                    if bitrate_str.endswith('M'):
+                        output_bitrate = float(bitrate_str[:-1]) * 1000
+                    elif bitrate_str.endswith('K'):
+                        output_bitrate = float(bitrate_str[:-1])
+                    else:
+                        output_bitrate = float(bitrate_str)
+                except ValueError:
+                    pass
+            
+            # Calcula tamanho baseado no bitrate: (bitrate * duration) / 8 / 1024
+            estimated_size_mb = (output_bitrate * duration) / 8 / 1024
+        
+        return estimated_size_mb
+    
+    def _determine_transcode_status(self, profile: Dict[str, Any]) -> Dict[str, str]:
+        """Determina status de transcodificação para cada stream."""
+        # Mapeamento de codecs equivalentes
+        hevc_codecs = ['hevc', 'hevc_nvenc', 'hevc_amf', 'hevc_qsv', 'libx265', 'h265']
+        h264_codecs = ['h264', 'h264_nvenc', 'h264_amf', 'h264_qsv', 'libx264', 'avc1']
+        
+        input_video_codec = self._input_media_info.get('video', {}).get('codec_name', 'unknown').lower() if self._input_media_info.get('video') else 'unknown'
+        output_codec = profile.get('codec', 'hevc_nvenc').lower()
+        
+        # Verifica se é o mesmo tipo de codec (HEVC ou H264)
+        input_is_hevc = any(c in input_video_codec for c in hevc_codecs)
+        input_is_h264 = any(c in input_video_codec for c in h264_codecs)
+        output_is_hevc = any(c in output_codec for c in hevc_codecs)
+        output_is_h264 = any(c in output_codec for c in h264_codecs)
+        
+        # Vídeo: transcode se codec de saída for diferente tipo
+        if input_is_hevc and output_is_hevc:
+            video_status = 'copy'
+        elif input_is_h264 and output_is_h264:
+            video_status = 'copy'
+        else:
+            video_status = 'transcode'
+        
+        # Áudio: copy se keep_audio for True, senão transcode para AAC
+        audio_status = 'copy' if profile.get('keep_audio', True) else 'transcode'
+        
+        # Legenda: copy ou burned
+        subtitle_status = 'burn' if profile.get('subtitle_burn', False) else 'copy'
+        
+        return {
+            'video': video_status,
+            'audio': audio_status,
+            'subtitle': subtitle_status
+        }
+    
+    def _get_status_icon(self, status: str) -> str:
+        """Retorna ícone para status de transcodificação."""
+        icons = {
+            'transcode': '⚡',  # Relâmpago para transcodificação
+            'copy': '📋',       # Clipboard para cópia
+            'burn': '🔥'        # Fogo para burn-in
+        }
+        return icons.get(status, '❓')
+    
+    def _get_status_color(self, status: str) -> str:
+        """Retorna cor para status de transcodificação."""
+        colors = {
+            'transcode': 'yellow',
+            'copy': 'green',
+            'burn': 'red'
+        }
+        return colors.get(status, 'white')
+    
+    def _generate_media_info_panel(self) -> Table:
+        """Gera tabela side-by-side de informações de mídia."""
+        table = Table(show_header=True, box=None, padding=(0, 2), expand=True)
+        table.add_column("Stream", style="cyan", width=12)
+        table.add_column("Entrada", style="white", width=30)
+        table.add_column("→", style="dim", justify="center")
+        table.add_column("Saída", style="white", width=30)
+        table.add_column("Status", style="dim", width=10)
+        
+        # Adiciona linha de informações de arquivo (tamanho e duração)
+        input_size_mb = self._input_media_info.get('size_mb', 0)
+        input_duration = self._input_media_info.get('duration', 0)
+        input_bitrate = self._input_media_info.get('bitrate', 0)
+        
+        if input_size_mb > 0:
+            size_str = f"[bold]{input_size_mb:.1f} MB[/bold]"
+        else:
+            size_str = "[dim]--[/dim]"
+        
+        if input_duration > 0:
+            hours = int(input_duration // 3600)
+            minutes = int((input_duration % 3600) // 60)
+            seconds = int(input_duration % 60)
+            duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            duration_str = "--:--:--"
+        
+        if input_bitrate > 0:
+            bitrate_str = f"{input_bitrate / 1000:.1f} Kbps"
+        else:
+            bitrate_str = "[dim]--[/dim]"
+        
+        input_file_info = f"{size_str}\n[dim]Duração: {duration_str}[/dim]\n[dim]Bitrate: {bitrate_str}[/dim]"
+        
+        # Output file info (estimado)
+        output_profile = self._output_media_info.get('profile', {})
+        output_codec_name = self._output_media_info.get('video', {}).get('codec_name', 'Unknown')
+        cq = output_profile.get('cq', 'CQ20')
+        estimated_size_mb = self._output_media_info.get('estimated_size_mb', 0)
+        
+        # Calcula economia de espaço estimada
+        if estimated_size_mb > 0 and input_size_mb > 0:
+            space_saved = input_size_mb - estimated_size_mb
+            space_saved_pct = ((input_size_mb - estimated_size_mb) / input_size_mb) * 100
+            if space_saved_pct > 0:
+                size_info = f"[green]~{estimated_size_mb:.1f} MB[/green]\n[dim]Economia: {space_saved_pct:.1f}%[/dim]"
+            else:
+                size_info = f"[yellow]~{estimated_size_mb:.1f} MB[/yellow]\n[dim]Similar ao original[/dim]"
+        elif estimated_size_mb > 0:
+            size_info = f"[bold]~{estimated_size_mb:.1f} MB[/bold]"
+        else:
+            size_info = "[dim]Calculando...[/dim]"
+        
+        output_file_info = f"[dim]Codec: {output_codec_name}[/dim]\n[dim]Quality: {cq}[/dim]\n{size_info}"
+        
+        table.add_row(
+            "📁 Arquivo",
+            input_file_info,
+            "→",
+            output_file_info,
+            ""
+        )
+        
+        # Vídeo
+        input_video = self._input_media_info.get('video', {})
+        output_video = self._output_media_info.get('video', {})
+        
+        if input_video:
+            input_video_info = f"[bold]{input_video.get('codec_name', 'unknown').upper()}[/bold]"
+            if input_video.get('width') and input_video.get('height'):
+                input_video_info += f"\n[dim]{input_video['width']}x{input_video['height']}[/dim]"
+            if input_video.get('color_transfer') or input_video.get('color_primaries') == 'bt2020':
+                input_video_info += f"\n[bold magenta]HDR[/bold magenta]"
+        else:
+            input_video_info = "[dim]--[/dim]"
+        
+        output_video_info = f"[bold]{output_video.get('codec_name', 'unknown')}[/bold]"
+        video_status = self._transcode_status.get('video', 'unknown')
+        
+        table.add_row(
+            "🎬 Vídeo",
+            input_video_info,
+            "→",
+            output_video_info,
+            f"[{self._get_status_color(video_status)}]{self._get_status_icon(video_status)} {video_status.upper()}[/{self._get_status_color(video_status)}]"
+        )
+        
+        # Áudio
+        input_audio_streams = self._input_media_info.get('audio', [])
+        output_audio = self._output_media_info.get('audio', [{}])
+        
+        if input_audio_streams:
+            audio_codecs = set()
+            for stream in input_audio_streams:
+                codec = stream.get('codec_name', 'unknown')
+                lang = stream.get('tags', {}).get('language', '')
+                audio_codecs.add(f"{codec.upper()}" + (f" ({lang})" if lang else ""))
+            input_audio_info = "\n".join(audio_codecs) if audio_codecs else "[dim]--[/dim]"
+        else:
+            input_audio_info = "[dim]--[/dim]"
+        
+        audio_status = self._transcode_status.get('audio', 'unknown')
+        output_audio_info = output_audio[0].get('codec_name', 'Copy') if output_audio else 'Copy'
+        
+        table.add_row(
+            "🔊 Áudio",
+            input_audio_info,
+            "→",
+            f"[bold]{output_audio_info}[/bold]",
+            f"[{self._get_status_color(audio_status)}]{self._get_status_icon(audio_status)} {audio_status.upper()}[/{self._get_status_color(audio_status)}]"
+        )
+        
+        # Legendas
+        input_subtitle_streams = self._input_media_info.get('subtitle', [])
+        output_subtitle = self._output_media_info.get('subtitle', [{}])
+        
+        if input_subtitle_streams:
+            subtitle_codecs = set()
+            for stream in input_subtitle_streams:
+                codec = stream.get('codec_name', 'unknown')
+                lang = stream.get('tags', {}).get('language', '')
+                subtitle_codecs.add(f"{codec.upper()}" + (f" ({lang})" if lang else ""))
+            input_subtitle_info = f"{len(input_subtitle_streams)} stream(s): " + ", ".join(list(subtitle_codecs)[:3])
+            if len(subtitle_codecs) > 3:
+                input_subtitle_info += f" +{len(subtitle_codecs) - 3}"
+        else:
+            input_subtitle_info = "[dim]--[/dim]"
+        
+        subtitle_status = self._transcode_status.get('subtitle', 'unknown')
+        output_subtitle_info = output_subtitle[0].get('codec_name', 'Copy') if output_subtitle else 'Copy'
+        
+        table.add_row(
+            "📝 Legendas",
+            input_subtitle_info,
+            "→",
+            f"[bold]{output_subtitle_info}[/bold]",
+            f"[{self._get_status_color(subtitle_status)}]{self._get_status_icon(subtitle_status)} {subtitle_status.upper()}[/{self._get_status_color(subtitle_status)}]"
+        )
+        
+        return table
+    
+    def _generate_status_legend(self) -> Text:
+        """Gera legenda para ícones de status."""
+        legend = Text()
+        legend.append("Legenda: ", style="dim")
+        legend.append("⚡ ", style="yellow")
+        legend.append("Transcode  ", style="white")
+        legend.append("📋 ", style="green")
+        legend.append("Copy  ", style="white")
+        legend.append("🔥 ", style="red")
+        legend.append("Burn-in", style="white")
+        return legend
+    
     def _generate_display(self) -> Panel:
         """Gera display completo."""
         with self._lock:
@@ -137,6 +484,9 @@ class RealTimeEncodingMonitor:
             
             # Barra de progresso
             progress_bar = self._generate_progress_bar(self._progress)
+            
+            # Painel de informações de mídia (side-by-side)
+            media_info_panel = self._generate_media_info_panel()
             
             # Tabela de hardware
             hw_table = Table(show_header=False, box=None, padding=(0, 1))
@@ -185,6 +535,10 @@ class RealTimeEncodingMonitor:
                 Text.from_markup(f"[dim]{self._status}[/dim]"),
                 Text(""),
                 Text.from_markup(progress_bar),
+                Text(""),
+                Text.from_markup("[bold magenta]📊 Stream Information:[/bold magenta]"),
+                media_info_panel,
+                self._generate_status_legend(),
                 Text(""),
                 Text.from_markup("[bold cyan]⚡ Encoding Stats:[/bold cyan]"),
                 encoding_table,

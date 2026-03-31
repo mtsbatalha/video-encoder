@@ -43,6 +43,7 @@ class JobManager:
         self._jobs_file = self.jobs_dir / "jobs.json"
         self._jobs: Dict[str, Dict[str, Any]] = {}
         self._lock = __import__('threading').Lock()
+        self._status_callbacks: Dict[str, List[callable]] = {}  # Callbacks por job_id
         self.load()
     
     def load(self) -> Dict[str, Dict[str, Any]]:
@@ -97,6 +98,21 @@ class JobManager:
         
         return job_id
     
+    def register_status_callback(self, job_id: str, callback: callable) -> None:
+        """Registra um callback para quando o status do job mudar."""
+        if job_id not in self._status_callbacks:
+            self._status_callbacks[job_id] = []
+        self._status_callbacks[job_id].append(callback)
+    
+    def _trigger_callbacks(self, job_id: str, old_status: str, new_status: str) -> None:
+        """Aciona callbacks registrados para mudança de status."""
+        if job_id in self._status_callbacks:
+            for callback in self._status_callbacks[job_id]:
+                try:
+                    callback(job_id, old_status, new_status)
+                except Exception as e:
+                    print(f"Erro ao executar callback para job {job_id}: {e}")
+    
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Obtém job por ID."""
         return self._jobs.get(job_id)
@@ -106,6 +122,8 @@ class JobManager:
         with self._lock:
             if job_id not in self._jobs:
                 return False
+            
+            old_status = self._jobs[job_id]["status"]
             
             self._jobs[job_id]["status"] = status.value
             
@@ -118,6 +136,10 @@ class JobManager:
                 self._jobs[job_id][key] = value
             
             self.save()
+            
+            # Aciona callbacks após atualização
+            self._trigger_callbacks(job_id, old_status, status.value)
+            
             return True
     
     def update_progress(self, job_id: str, progress: float) -> bool:

@@ -40,11 +40,15 @@ python vigia_nvenc.py --help
 # Codificar arquivo único com perfil
 python vigia_nvenc.py -f video.mkv -p "Filmes 4K HEVC"
 
-# Codificar pasta inteira
+# Codificar pasta inteira (codificação única)
 python vigia_nvenc.py -F /input/videos -O /output -p "Series 1080p"
 
 # Modo watch (monitorar pastas configuradas)
 python vigia_nvenc.py --watch
+
+# Menu interativo de pastas recorrentes
+python vigia_nvenc.py --interactive
+# Selecione: "Gerenciar Conversões Recorrentes"
 
 # Menu interativo
 python vigia_nvenc.py --interactive
@@ -113,6 +117,70 @@ python vigia_nvenc.py --queue-resume
 # Limpar fila
 python vigia_nvenc.py --queue-clear
 ```
+
+## Codificação de Pasta Recorrente
+
+### Diferença entre Codificação Única e Recorrente
+
+| Tipo | Descrição | Uso |
+|------|-----------|-----|
+| **Codificação Única** | Processa todos os arquivos de uma pasta uma única vez | `python vigia_nvenc.py -F /input -O /output -p "Perfil"` |
+| **Codificação Recorrente** | Monitora continuamente uma pasta e processa novos arquivos automaticamente | Menu interativo → "Gerenciar Conversões Recorrentes" |
+
+### Configuração Rápida
+
+1. Inicie o menu interativo:
+```bash
+python vigia_nvenc.py --interactive
+```
+
+2. Selecione **"Gerenciar Conversões Recorrentes"**
+
+3. Escolha **"Adicionar nova pasta recorrente"**
+
+4. Preencha as informações:
+   - Nome descritivo
+   - Caminho da pasta de entrada
+   - Caminho da pasta de saída
+   - Perfil de codificação
+   - Opções adicionais
+
+### Opções de Configuração
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `preserve_subdirectories` | Preserva estrutura de subdiretórios no output | `true` |
+| `delete_source_after_encode` | Exclui arquivo original após codificação | `false` |
+| `copy_subtitles` | Copia arquivos de legenda associados | `true` |
+| `skip_existing_output` | Pula arquivos já existentes no output | `true` |
+| `supported_extensions` | Extensões de arquivo suportadas | `.mp4, .mkv, .avi, ...` |
+| `min_file_size_mb` | Tamanho mínimo do arquivo em MB | `0` |
+
+### Monitoramento
+
+Após configurar, inicie o monitoramento:
+
+```bash
+# No menu interativo, selecione:
+# 6. Iniciar/Parar monitores
+# 1. Iniciar todos os monitores
+```
+
+Os monitores verificam periodicamente por novos arquivos e os adicionam automaticamente à fila de codificação.
+
+### Histórico e Estatísticas
+
+Visualize o histórico de processamento no menu:
+```
+7. Ver histórico de processamento
+```
+
+Veja estatísticas gerais:
+```bash
+python vigia_nvenc.py --stats
+```
+
+📖 **Guia Completo:** Consulte [`docs/RECURRENT_FOLDER_GUIDE.md`](docs/RECURRENT_FOLDER_GUIDE.md) para documentação detalhada.
 
 ## Perfis Incluídos
 
@@ -252,17 +320,31 @@ success, error = ffmpeg.run_encoding(command)
 
 ## Troubleshooting
 
-### "FFmpeg não encontrado"
+### Problemas Gerais
+
+**"FFmpeg não encontrado"**
 Instale FFmpeg com suporte NVENC: https://www.gyan.dev/ffmpeg/builds/
 
-### "Nenhum codec NVENC encontrado"
+**"Nenhum codec NVENC encontrado"**
 - Atualize drivers NVIDIA
 - Verifique se GPU é compatível com NVENC
 
-### "psutil não disponível"
+**"psutil não disponível"**
 ```bash
 pip install psutil
 ```
+
+### Codificação Recorrente
+
+| Problema | Causa Provável | Solução |
+|----------|----------------|---------|
+| Monitor não inicia | Pasta de entrada não existe | Verifique se o caminho está correto |
+| Arquivos não são processados | Extensão não suportada | Adicione extensão em `supported_extensions` |
+| Arquivo muito pequeno | Tamanho abaixo do mínimo | Ajuste `min_file_size_mb` nas opções |
+| Output não é gerado | Perfil inválido | Verifique se o perfil existe |
+| Monitor para inesperadamente | Erro de permissão | Verifique permissões de leitura/escrita |
+
+📖 **Mais ajuda:** Consulte [`docs/RECURRENT_FOLDER_GUIDE.md`](docs/RECURRENT_FOLDER_GUIDE.md) para troubleshooting detalhado.
 
 ## Licença
 

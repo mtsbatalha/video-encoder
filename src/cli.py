@@ -20,6 +20,8 @@ from .utils.file_utils import FileUtils
 from .ui.menu import Menu
 from .ui.progress import ProgressDisplay
 from .ui.queue_menu import show_queue_submenu
+from .ui.recurrent_folder_ui import RecurrentFolderUI
+from .managers.recurrent_history_manager import RecurrentHistoryManager
 
 
 console = Console()
@@ -845,6 +847,41 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
             break
 
 
+def run_folder_conversion_submenu(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
+    """Exibe submenu de codificação de pasta com opções única e recorrente."""
+    menu = Menu(console)
+
+    while True:
+        menu.clear()
+        menu.print_header("Codificação de Pasta", "Selecione o tipo de codificação")
+
+        options = [
+            {"description": "Codificação Única (manual)", "shortcut": "1"},
+            {"description": "Codificação Recorrente (automática)", "shortcut": "2"},
+            {"description": "Voltar", "shortcut": "0"}
+        ]
+
+        choice = menu.show_menu("Submenu", options)
+
+        if choice == 0:
+            run_single_folder_conversion(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
+        elif choice == 1:
+            run_recurrent_folder_from_submenu(config, profile_mgr)
+        elif choice == 2:
+            break
+
+
+def run_single_folder_conversion(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
+    """Executa codificação única de pasta (funcionalidade existente)."""
+    run_folder_conversion_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
+
+
+def run_recurrent_folder_from_submenu(config: ConfigManager, profile_mgr: ProfileManager):
+    """Executa codificação recorrente a partir do submenu."""
+    recurrent_ui = RecurrentFolderUI(console, config, profile_mgr)
+    recurrent_ui.run()
+
+
 def run_interactive_mode(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
     """Executa modo interativo."""
     menu = Menu(console)
@@ -854,18 +891,19 @@ def run_interactive_mode(config: ConfigManager, profile_mgr: ProfileManager, job
         menu.print_header("NVENC Encoder Pro v2.0", "Modo Interativo")
 
         options = [
-            {"description": "Conversão de pasta (manual)", "shortcut": "1"},
+            {"description": "Codificação de Pasta", "shortcut": "1"},
             {"description": "Codificar arquivo único", "shortcut": "2"},
             {"description": "Ver fila de jobs", "shortcut": "3"},
-            {"description": "Gerenciar perfis", "shortcut": "4"},
+            {"description": "Gerenciar Perfis", "shortcut": "4"},
             {"description": "Ver estatísticas", "shortcut": "5"},
-            {"description": "Sair", "shortcut": "6"}
+            {"description": "Gerenciar Conversões Recorrentes", "shortcut": "6"},
+            {"description": "Sair", "shortcut": "7"}
         ]
 
         choice = menu.show_menu("Menu Principal", options)
 
         if choice == 0:
-            run_folder_conversion_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
+            run_folder_conversion_submenu(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         elif choice == 1:
             run_single_file_cli(config, profile_mgr, job_mgr, queue_mgr, stats_mgr)
         elif choice == 2:
@@ -878,6 +916,8 @@ def run_interactive_mode(config: ConfigManager, profile_mgr: ProfileManager, job
             menu.show_stats_panel(stats)
             input("\nPressione Enter para continuar...")
         elif choice == 5:
+            run_recurrent_folder_from_submenu(config, profile_mgr)
+        elif choice == 6:
             break
 
 
