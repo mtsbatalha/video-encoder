@@ -12,6 +12,31 @@ import time
 import re
 
 
+def format_size(size_mb: float) -> str:
+    """Formata tamanho em GB, MB ou KB dependendo do valor.
+    
+    Args:
+        size_mb: Tamanho em megabytes.
+    
+    Returns:
+        String formatada com unidade apropriada.
+    """
+    if size_mb <= 0:
+        return "--"
+    
+    # Converte para bytes para facilitar cálculo
+    size_bytes = size_mb * 1024 * 1024
+    
+    if size_bytes >= 1024 * 1024 * 1024:  # >= 1 GB
+        size_gb = size_bytes / (1024 * 1024 * 1024)
+        return f"{size_gb:.2f} GB"
+    elif size_bytes >= 1024 * 1024:  # >= 1 MB
+        return f"{size_mb:.1f} MB"
+    else:  # < 1 MB
+        size_kb = size_bytes / (1024 * 1024) * 1024
+        return f"{size_kb:.1f} KB"
+
+
 class RealTimeEncodingMonitor:
     """Monitor de encoding em tempo real com interface completa."""
     
@@ -326,7 +351,7 @@ class RealTimeEncodingMonitor:
         input_bitrate = self._input_media_info.get('bitrate', 0)
         
         if input_size_mb > 0:
-            size_str = f"[bold]{input_size_mb:.1f} MB[/bold]"
+            size_str = f"[bold]{format_size(input_size_mb)}[/bold]"
         else:
             size_str = "[dim]--[/dim]"
         
@@ -356,11 +381,11 @@ class RealTimeEncodingMonitor:
             space_saved = input_size_mb - estimated_size_mb
             space_saved_pct = ((input_size_mb - estimated_size_mb) / input_size_mb) * 100
             if space_saved_pct > 0:
-                size_info = f"[green]~{estimated_size_mb:.1f} MB[/green]\n[dim]Economia: {space_saved_pct:.1f}%[/dim]"
+                size_info = f"[green]~{format_size(estimated_size_mb)}[/green]\n[dim]Economia: {space_saved_pct:.1f}%[/dim]"
             else:
-                size_info = f"[yellow]~{estimated_size_mb:.1f} MB[/yellow]\n[dim]Similar ao original[/dim]"
+                size_info = f"[yellow]~{format_size(estimated_size_mb)}[/yellow]\n[dim]Similar ao original[/dim]"
         elif estimated_size_mb > 0:
-            size_info = f"[bold]~{estimated_size_mb:.1f} MB[/bold]"
+            size_info = f"[bold]~{format_size(estimated_size_mb)}[/bold]"
         else:
             size_info = "[dim]Calculando...[/dim]"
         
@@ -500,9 +525,10 @@ class RealTimeEncodingMonitor:
             gpu_mem_total = self._hw_stats.get('gpu_memory_total', 0)
             cpu_util = self._hw_stats.get('cpu_util', 0)
             
-            gpu_mem_display = f"{gpu_mem}MB" if gpu_mem > 0 else "--"
+            # Formata VRAM usando format_size (que espera MB)
+            gpu_mem_display = format_size(gpu_mem) if gpu_mem > 0 else "--"
             if gpu_mem_total > 0:
-                gpu_mem_display += f"/{gpu_mem_total}MB"
+                gpu_mem_display += f"/{format_size(gpu_mem_total)}"
             
             temp_color = "red" if gpu_temp > 80 else "yellow" if gpu_temp > 60 else "green"
             
