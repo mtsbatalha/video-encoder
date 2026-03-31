@@ -71,8 +71,9 @@ class PathUtils:
         for char in unsafe_chars:
             safe_name = safe_name.replace(char, '_')
         
-        # Remove caracteres de controle e não-ASCII problemáticos
-        safe_name = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', safe_name)
+        # Remove caracteres de controle ASCII, mas preserva caracteres UTF-8 válidos
+        # Ajuste: remover apenas caracteres de controle realmente problemáticos
+        safe_name = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', safe_name)
         # Remove múltiplos underscores consecutivos
         safe_name = re.sub(r'_{2,}', '_', safe_name)
         safe_name = safe_name.strip('. _')

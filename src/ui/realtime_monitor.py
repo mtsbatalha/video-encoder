@@ -116,6 +116,10 @@ class RealTimeEncodingMonitor:
     def stop(self):
         """Para monitor."""
         self._running = False
+        # Garante que o status esteja como finalizado antes de parar
+        with self._lock:
+            if self._progress >= 100.0:
+                self._status = "Finalizado"
         if self._live:
             try:
                 self._live.stop()
@@ -134,6 +138,10 @@ class RealTimeEncodingMonitor:
                     estimated_total = elapsed / (progress / 100)
                     remaining = estimated_total - elapsed
                     self._time_remaining = time.strftime('%H:%M:%S', time.gmtime(max(0, remaining)))
+            
+            # Quando o progresso atinge 100%, atualiza o status automaticamente
+            if progress >= 100.0:
+                self._status = "Finalizado"
     
     def update_hw_stats(self, stats: Dict[str, Any]):
         """Atualiza stats de hardware."""

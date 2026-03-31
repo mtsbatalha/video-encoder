@@ -238,6 +238,11 @@ class EncoderEngine:
             
             for callback in self._status_callbacks:
                 callback(job_id, job.status)
+            
+            # Atualizar o progresso do job para 100% nos callbacks se for sucesso
+            if success:
+                for callback in self._progress_callbacks:
+                    callback(job_id, 100.0)
     
     def _execute_job(self, job: EncodingJob) -> tuple[bool, str]:
         """Executa job de encoding."""
@@ -358,6 +363,10 @@ class EncoderEngine:
         success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
         
         print(f"🔍 DEBUG: Encoding finalizado - Success: {success}, Error: {error}")
+        
+        # Antes de parar o monitor, garantir que o progresso está completo
+        if success:
+            self.realtime_monitor.update_progress(100.0)
         
         self.realtime_monitor.stop()
         
