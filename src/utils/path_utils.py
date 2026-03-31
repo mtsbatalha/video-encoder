@@ -63,16 +63,19 @@ class PathUtils:
             return False
     
     @staticmethod
-    def get_safe_filename(filename: str, max_length: int = 255) -> str:
-        """Gera nome de arquivo seguro."""
+    def get_safe_filename(filename: str, max_length: int = 180) -> str:
+        """Gera nome de arquivo seguro com limite reduzido para evitar paths muito longos."""
         unsafe_chars = r'<>:"/\|?*'
         safe_name = filename
         
         for char in unsafe_chars:
             safe_name = safe_name.replace(char, '_')
         
+        # Remove caracteres de controle e não-ASCII problemáticos
         safe_name = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', safe_name)
-        safe_name = safe_name.strip('. ')
+        # Remove múltiplos underscores consecutivos
+        safe_name = re.sub(r'_{2,}', '_', safe_name)
+        safe_name = safe_name.strip('. _')
         
         if len(safe_name) > max_length:
             name, ext = os.path.splitext(safe_name)
@@ -98,7 +101,13 @@ class PathUtils:
         stem = input_file.stem
         ext = extension or input_file.suffix
 
-        if suffix is None and codec:
+        # Simplificar nome se codec for fornecido (para evitar paths muito longos)
+        if codec:
+            # Truncar nome base se for muito longo
+            max_stem_length = 80
+            if len(stem) > max_stem_length:
+                stem = stem[:max_stem_length]
+            
             suffix = f"_{codec}"
             if cq:
                 suffix += f"_cq{cq}"

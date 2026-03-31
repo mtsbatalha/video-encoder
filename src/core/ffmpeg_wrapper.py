@@ -234,17 +234,13 @@ class FFmpegWrapper:
         elif audio_streams:
             cmd.extend(['-map', '0:a?', '-c:a', 'aac', '-b:a', '192k'])
         
+        # Copiar todas as legendas sem re-encoding para evitar erros com formatos incompatíveis (SSA/ASS)
         if subtitle_burn:
-            subtitle_streams = self.get_subtitle_streams(self.get_media_info(input_path))
-            if subtitle_streams:
-                for i, sub in enumerate(subtitle_streams):
-                    if sub.get('disposition', {}).get('forced', False):
-                        cmd.extend(['-map', f'0:s:{i}'])
-                        break
-                else:
-                    cmd.extend(['-map', '0:s:0?'])
+            # Se burn está habilitado, ainda assim copiar as legendas (não implementar burn por ora)
+            cmd.extend(['-map', '0:s?', '-c:s', 'copy'])
         else:
-            cmd.extend(['-map', '0:s?'])
+            # Copiar todas as legendas como estão
+            cmd.extend(['-map', '0:s?', '-c:s', 'copy'])
         
         cmd.extend(['-map', '0:v:0'])
         
