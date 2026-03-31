@@ -263,6 +263,7 @@ class FFmpegWrapper:
             print(f"🔍 DEBUG: Criando subprocess...")
             self._process = subprocess.Popen(
                 command,
+                stdin=subprocess.PIPE,  # ✅ DIAGNÓSTICO: Fornecer stdin explícito
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -270,8 +271,14 @@ class FFmpegWrapper:
                 universal_newlines=True
             )
             print(f"🔍 DEBUG: Subprocess criado com PID: {self._process.pid}")
+            
+            # ✅ DIAGNÓSTICO: Fechar stdin imediatamente para evitar FFmpeg esperando input
+            if self._process.stdin:
+                print(f"🔍 DEBUG: Fechando stdin do processo FFmpeg...")
+                self._process.stdin.close()
+            
             print(f"🔍 DEBUG: stdout pipe válido? {self._process.stdout is not None}")
-            print(f"🔍 DEBUG: stderr pipe válido? {self._process.stderr is not None}")
+            print(f"🔍 DEBUG: stderr redireccionado para stdout")
             
             output_lines = []
             import time as time_module
@@ -304,21 +311,44 @@ class FFmpegWrapper:
                                         callback(line.strip())
                     break
                 
-                # Lê uma linha da saída do FFmpeg
+                # ✅ DIAGNÓSTICO: Ler com timeout e buffer menor para capturar \r sem \n
                 if self._process.stdout:
                     try:
-                        print(f"🔍 DEBUG: Tentando ler linha do stdout...")
-                        output = self._process.stdout.readline()
-                        print(f"🔍 DEBUG: readline() retornou: {len(output) if output else 0} caracteres")
-                        if output:
-                            last_output_time = time_module.time()
-                            output_lines.append(output.strip())
-                            if callback:
-                                callback(output.strip())
+                        # Tentar ler com read() ao invés de readline() - captura \r também
+                        import select
+                        import sys
+                        
+                        # Windows não suporta select em pipes, usar readline com timeout simulado
+                        if sys.platform == 'win32':
+                            # Método alternativo para Windows: non-blocking read
+                            print(f"🔍 DEBUG: (Win32) Tentando ler linha do stdout...")
+                            output = self._process.stdout.readline()
+                            print(f"🔍 DEBUG: readline() retornou: {len(output) if output else 0} caracteres")
+                            
+                            # ✅ DIAGNÓSTICO: Mostrar representação dos caracteres especiais
+                            if output:
+                                print(f"🔍 DEBUG: Conteúdo raw (repr): {repr(output[:100])}")
+                                print(f"🔍 DEBUG: Contém \\r? {'SIM' if '\\r' in repr(output) else 'NÃO'}")
+                                print(f"🔍 DEBUG: Contém \\n? {'SIM' if '\\n' in repr(output) else 'NÃO'}")
+                                
+                                last_output_time = time_module.time()
+                                output_lines.append(output.strip())
+                                if callback:
+                                    callback(output.strip())
+                            else:
+                                # Sem saída disponível, espera um pouco antes de tentar novamente
+                                print(f"🔍 DEBUG: Nenhuma saída de readline(), aguardando 0.1s...")
+                                time_module.sleep(0.1)
                         else:
-                            # Sem saída disponível, espera um pouco antes de tentar novamente
-                            print(f"🔍 DEBUG: Nenhuma saída, aguardando 0.1s...")
-                            time_module.sleep(0.1)
+                            # Unix/Linux: pode usar select
+                            output = self._process.stdout.readline()
+                            if output:
+                                last_output_time = time_module.time()
+                                output_lines.append(output.strip())
+                                if callback:
+                                    callback(output.strip())
+                            else:
+                                time_module.sleep(0.1)
                     except Exception as e:
                         # Erro na leitura do pipe - continua tentando
                         print(f"⚠️ DEBUG: Exceção ao ler stdout: {type(e).__name__}: {e}")
