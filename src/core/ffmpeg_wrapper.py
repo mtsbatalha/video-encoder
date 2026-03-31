@@ -276,11 +276,14 @@ class FFmpegWrapper:
             
             start_time = time_module.time()
             last_output_time = start_time
-            max_idle_seconds = 10
+            max_idle_seconds = 300  # 5 minutos sem saída = possível hang
             
+            # Loop principal de leitura da saída do FFmpeg
             while True:
+                # Verifica se o processo terminou
                 poll_result = self._process.poll()
                 if poll_result is not None:
+                    # Processo terminou - lê qualquer saída restante
                     if self._process.stdout:
                         remaining = self._process.stdout.read()
                         if remaining:
@@ -291,6 +294,7 @@ class FFmpegWrapper:
                                         callback(line.strip())
                     break
                 
+                # Lê uma linha da saída do FFmpeg
                 if self._process.stdout:
                     try:
                         output = self._process.stdout.readline()
@@ -300,14 +304,24 @@ class FFmpegWrapper:
                             if callback:
                                 callback(output.strip())
                         else:
+                            # Sem saída disponível, espera um pouco antes de tentar novamente
                             time_module.sleep(0.1)
                     except Exception:
-                        break
+                        # Erro na leitura do pipe - continua tentando
+                        time_module.sleep(0.1)
                 
-                if time_module.time() - last_output_time > max_idle_seconds:
-                    if poll_result is None:
-                        last_output_time = time_module.time()
+                # Verifica timeout de inatividade (processo pode estar travado)
+                idle_time = time_module.time() - last_output_time
+                if idle_time > max_idle_seconds:
+                    print(f"⚠️ DEBUG: Processo inativo por {idle_time:.0f}s. Verificando status...")
+                    # Verifica novamente se o processo terminou
+                    if self._process.poll() is not None:
+                        print(f"🔍 DEBUG: Processo terminou durante período de inatividade")
+                        break
+                    # Se ainda rodando, continua aguardando (não quebra o loop)
+                    last_output_time = time_module.time()  # Reseta timer para evitar loop infinito de warnings
             
+            # Aguarda processo terminar e obtém returncode
             returncode = self._process.wait(timeout=5)
             self._process = None
             
