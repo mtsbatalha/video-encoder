@@ -437,6 +437,8 @@ class Menu:
         info.append(f"{'Sim' if profile.get('hdr_to_sdr') else 'Não'}\n", style="green" if profile.get('hdr_to_sdr') else "dim")
         info.append(f"Deinterlace: ", style="cyan")
         info.append(f"{'Sim' if profile.get('deinterlace') else 'Não'}\n", style="green" if profile.get('deinterlace') else "dim")
+        info.append(f"Bitrate: ", style="cyan")
+        info.append(f"{profile.get('bitrate', '10M')}\n", style="yellow")
         
         self.console.print(Panel(info, border_style="cyan", title="Configurações Atuais"))
         
@@ -452,8 +454,9 @@ class Menu:
                 {"description": f"Two-Pass: [{'green' if profile.get('two_pass') else 'dim'}]{'Sim' if profile.get('two_pass') else 'Não'}[/{'green' if profile.get('two_pass') else 'dim'}]", "shortcut": "5"},
                 {"description": f"HDR para SDR: [{'green' if profile.get('hdr_to_sdr') else 'dim'}]{'Sim' if profile.get('hdr_to_sdr') else 'Não'}[/{'green' if profile.get('hdr_to_sdr') else 'dim'}]", "shortcut": "6"},
                 {"description": f"Deinterlace: [{'green' if profile.get('deinterlace') else 'dim'}]{'Sim' if profile.get('deinterlace') else 'Não'}[/{'green' if profile.get('deinterlace') else 'dim'}]", "shortcut": "7"},
-                {"description": "✅ Concluir e voltar", "shortcut": "8"},
-                {"description": "❌ Cancelar edições", "shortcut": "9"}
+                {"description": f"Bitrate: [yellow]{profile.get('bitrate', '10M')}[/yellow]", "shortcut": "8"},
+                {"description": "✅ Concluir e voltar", "shortcut": "9"},
+                {"description": "❌ Cancelar edições", "shortcut": "10"}
             ]
             
             choice = self.show_menu("Editar Configurações", edit_options)
@@ -465,10 +468,15 @@ class Menu:
             
             elif choice == 1:  # CQ
                 new_cq = self.ask("Novo valor CQ (1-51, ou vazio para bitrate)", default=profile.get('cq', ''))
-                profile['cq'] = new_cq if new_cq else None
-                if not new_cq:
+                if new_cq:
+                    profile['cq'] = new_cq
+                    profile['bitrate'] = None  # Limpa bitrate quando CQ é definido
+                    self.print_success(f"CQ atualizado para: {new_cq} (bitrate desativado)")
+                else:
+                    profile['cq'] = None
                     bitrate = self.ask("Bitrate (ex: 10M, 5000K)", default=profile.get('bitrate', '10M'))
                     profile['bitrate'] = bitrate
+                    self.print_success(f"Bitrate atualizado para: {bitrate} (CQ desativado)")
             
             elif choice == 2:  # Preset
                 preset_options = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"]
@@ -493,11 +501,17 @@ class Menu:
                 profile['deinterlace'] = not profile.get('deinterlace', False)
                 self.print_success(f"Deinterlace: {'Ativado' if profile['deinterlace'] else 'Desativado'}")
             
-            elif choice == 7:  # Concluir
+            elif choice == 7:  # Bitrate
+                bitrate = self.ask("Bitrate (ex: 10M, 5000K)", default=profile.get('bitrate', '10M'))
+                profile['bitrate'] = bitrate
+                profile['cq'] = None  # Limpa CQ quando bitrate é definido
+                self.print_success(f"Bitrate atualizado para: {bitrate} (CQ desativado)")
+            
+            elif choice == 8:  # Concluir
                 self.print_success("Configurações atualizadas!")
                 return profile
             
-            elif choice == 8:  # Cancelar
+            elif choice == 9:  # Cancelar
                 self.print_warning("Edições canceladas")
                 return profile
         
