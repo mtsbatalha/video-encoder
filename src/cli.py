@@ -735,43 +735,114 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
 
     console.print(f"[green]Encontrados {len(video_files)} arquivo(s) de vídeo[/green]\n")
 
-    for video_file in video_files:
-        rel_path = Path(video_file).relative_to(input_folder)
-        rel_parent = rel_path.parent
+    # Exibir sumário visual dos diretórios e arquivos
+    menu.show_directory_summary(input_folder, video_files)
 
-        if str(rel_parent) != '.':
-            folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
-            video_output_dir = str(Path(output_folder) / folder_name)
-        else:
-            root_name = Path(input_folder).name
-            folder_name = PathUtils.generate_output_dir_name(root_name, codec, cq)
-            video_output_dir = str(Path(output_folder) / folder_name)
-
-        ensure_directory(video_output_dir)
-        output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq)
-
-        job_id = job_mgr.create_job(
-            input_path=video_file,
-            output_path=output_path,
-            profile_id=profile.get('id', 'manual'),
-            profile_name=profile.get('name', 'Manual')
-        )
-
-        queue_mgr.add_to_queue(
-            job_id=job_id,
-            input_path=video_file,
-            output_path=output_path,
+    # Exibir sumário pré-conversão com opções
+    while True:
+        action_choice = menu.show_pre_conversion_summary(
+            input_folder=input_folder,
+            output_folder=output_folder,
+            video_files=video_files,
             profile=profile
         )
 
-        source_dir = str(Path(video_file).parent)
-        FileUtils.copy_subtitles_to_output(source_dir, video_output_dir, Path(video_file).stem)
+        if action_choice == 0:  # 🚀 Iniciar conversão agora
+            # Adicionar todos os jobs à fila e processar imediatamente
+            for video_file in video_files:
+                rel_path = Path(video_file).relative_to(input_folder)
+                rel_parent = rel_path.parent
 
-    menu.print_success(f"{len(video_files)} job(s) adicionados à fila")
-    console.print(f"[cyan]Legendas copiadas para os diretórios de saída[/cyan]")
-    console.print()
+                if str(rel_parent) != '.':
+                    folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
+                    video_output_dir = str(Path(output_folder) / folder_name)
+                else:
+                    root_name = Path(input_folder).name
+                    folder_name = PathUtils.generate_output_dir_name(root_name, codec, cq)
+                    video_output_dir = str(Path(output_folder) / folder_name)
 
-    process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
+                ensure_directory(video_output_dir)
+                output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq)
+
+                job_id = job_mgr.create_job(
+                    input_path=video_file,
+                    output_path=output_path,
+                    profile_id=profile.get('id', 'manual'),
+                    profile_name=profile.get('name', 'Manual')
+                )
+
+                queue_mgr.add_to_queue(
+                    job_id=job_id,
+                    input_path=video_file,
+                    output_path=output_path,
+                    profile=profile
+                )
+
+                source_dir = str(Path(video_file).parent)
+                FileUtils.copy_subtitles_to_output(source_dir, video_output_dir, Path(video_file).stem)
+
+            menu.print_success(f"{len(video_files)} job(s) adicionados à fila e processamento iniciado")
+            console.print(f"[cyan]Legendas copiadas para os diretórios de saída[/cyan]")
+            console.print()
+            process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
+            break
+
+        elif action_choice == 1:  # 📋 Adicionar à fila
+            # Adicionar todos os jobs à fila sem processar
+            for video_file in video_files:
+                rel_path = Path(video_file).relative_to(input_folder)
+                rel_parent = rel_path.parent
+
+                if str(rel_parent) != '.':
+                    folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
+                    video_output_dir = str(Path(output_folder) / folder_name)
+                else:
+                    root_name = Path(input_folder).name
+                    folder_name = PathUtils.generate_output_dir_name(root_name, codec, cq)
+                    video_output_dir = str(Path(output_folder) / folder_name)
+
+                ensure_directory(video_output_dir)
+                output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq)
+
+                job_id = job_mgr.create_job(
+                    input_path=video_file,
+                    output_path=output_path,
+                    profile_id=profile.get('id', 'manual'),
+                    profile_name=profile.get('name', 'Manual')
+                )
+
+                queue_mgr.add_to_queue(
+                    job_id=job_id,
+                    input_path=video_file,
+                    output_path=output_path,
+                    profile=profile
+                )
+
+                source_dir = str(Path(video_file).parent)
+                FileUtils.copy_subtitles_to_output(source_dir, video_output_dir, Path(video_file).stem)
+
+            menu.print_success(f"{len(video_files)} job(s) adicionados à fila")
+            console.print(f"[cyan]Legendas copiadas para os diretórios de saída[/cyan]")
+            console.print()
+            console.print(f"[cyan]Jobs na fila: {queue_mgr.get_queue_length()}[/cyan]")
+            console.print("[dim]Use a opção 'Ver fila de jobs' no menu principal para gerenciar[/dim]")
+            input("\nPressione Enter para continuar...")
+            break
+
+        elif action_choice == 2:  # ⚙️ Configurações avançadas
+            # Abrir editor de perfil
+            profile = menu.show_advanced_profile_editor(profile)
+            # Atualizar codec e cq após edição
+            codec = profile.get('codec', 'hevc_nvenc')
+            cq = profile.get('cq')
+            # Atualizar nome do perfil se for manual
+            if profile.get('id') == 'manual':
+                profile['name'] = f"Manual ({codec} CQ{cq or profile.get('bitrate', 'auto')})"
+
+        elif action_choice == 3:  # ⏮ Voltar
+            menu.print_warning("Operação cancelada")
+            input("\nPressione Enter para continuar...")
+            break
 
 
 def run_interactive_mode(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
@@ -893,32 +964,71 @@ def run_single_file_cli(config: ConfigManager, profile_mgr: ProfileManager, job_
     cq = profile.get('cq')
     output_path = PathUtils.generate_output_path(input_path, output_dir, codec=codec, cq=cq)
     
-    job_id = job_mgr.create_job(
-        input_path=input_path,
-        output_path=output_path,
-        profile_id=profile['id'],
-        profile_name=profile['name']
-    )
-    
-    queue_was_empty = queue_mgr.get_queue_length() == 0
-    
-    queue_mgr.add_to_queue(
-        job_id=job_id,
-        input_path=input_path,
-        output_path=output_path,
-        profile=profile
-    )
-    
-    console.print(f"\n[green][OK][/green] Job adicionado à fila")
-    
-    if queue_was_empty:
-        options = ["Iniciar conversão agora", "Voltar ao menu"]
-        choice = menu.show_options(options, "Fila estava vazia - o que deseja fazer?")
-        if choice == 0:
+    # Exibir sumário pré-conversão para arquivo único
+    while True:
+        # Criar lista fictícia para o sumário
+        video_files = [input_path]
+        
+        action_choice = menu.show_pre_conversion_summary(
+            input_folder=str(Path(input_path).parent),
+            output_folder=output_dir,
+            video_files=video_files,
+            profile=profile
+        )
+        
+        if action_choice == 0:  # 🚀 Iniciar conversão agora
+            job_id = job_mgr.create_job(
+                input_path=input_path,
+                output_path=output_path,
+                profile_id=profile['id'],
+                profile_name=profile['name']
+            )
+            
+            queue_mgr.add_to_queue(
+                job_id=job_id,
+                input_path=input_path,
+                output_path=output_path,
+                profile=profile
+            )
+            
+            menu.print_success("Job adicionado à fila e processamento iniciado")
             process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
-    else:
-        console.print(f"[cyan]Jobs na fila: {queue_mgr.get_queue_length()}[/cyan]")
-        input("\nPressione Enter para continuar...")
+            break
+        
+        elif action_choice == 1:  # 📋 Adicionar à fila
+            job_id = job_mgr.create_job(
+                input_path=input_path,
+                output_path=output_path,
+                profile_id=profile['id'],
+                profile_name=profile['name']
+            )
+            
+            queue_mgr.add_to_queue(
+                job_id=job_id,
+                input_path=input_path,
+                output_path=output_path,
+                profile=profile
+            )
+            
+            menu.print_success("Job adicionado à fila")
+            console.print(f"[cyan]Jobs na fila: {queue_mgr.get_queue_length()}[/cyan]")
+            console.print("[dim]Use a opção 'Ver fila de jobs' no menu principal para gerenciar[/dim]")
+            input("\nPressione Enter para continuar...")
+            break
+        
+        elif action_choice == 2:  # ⚙️ Configurações avançadas
+            # Abrir editor de perfil
+            profile = menu.show_advanced_profile_editor(profile)
+            # Atualizar codec e cq após edição
+            codec = profile.get('codec', 'hevc_nvenc')
+            cq = profile.get('cq')
+            # Regenerar output path com novas configurações
+            output_path = PathUtils.generate_output_path(input_path, output_dir, codec=codec, cq=cq)
+        
+        elif action_choice == 3:  # ⏮ Voltar
+            menu.print_warning("Operação cancelada")
+            input("\nPressione Enter para continuar...")
+            break
 
 
 def run_folder_mode_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):

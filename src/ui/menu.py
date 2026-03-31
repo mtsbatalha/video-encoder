@@ -289,3 +289,216 @@ class Menu:
         )
         
         return choice - 1
+    
+    def show_directory_summary(self, directory: str, video_files: List[str]):
+        """Exibe sumário visual da estrutura de diretórios e arquivos de vídeo."""
+        from pathlib import Path
+        from rich.tree import Tree
+        from collections import defaultdict
+        
+        if not video_files:
+            self.print_warning("Nenhum vídeo encontrado no diretório")
+            return
+        
+        # Agrupar arquivos por diretório
+        dir_structure: Dict[str, List[str]] = defaultdict(list)
+        base_path = Path(directory)
+        
+        for video_file in video_files:
+            video_path = Path(video_file)
+            try:
+                rel_path = video_path.relative_to(base_path)
+                parent_dir = str(rel_path.parent)
+                dir_structure[parent_dir].append({
+                    'full_path': video_file,
+                    'filename': video_path.name,
+                    'rel_path': str(rel_path)
+                })
+            except ValueError:
+                # Arquivo fora do diretório base
+                dir_structure['.'].append({
+                    'full_path': video_file,
+                    'filename': video_path.name,
+                    'rel_path': video_path.name
+                })
+        
+        # Calcular estatísticas
+        total_dirs = len([d for d in dir_structure.keys() if d != '.'])
+        total_files = len(video_files)
+        
+        self.console.print()
+        self.console.print(Panel(
+            f"[bold cyan]📁 Diretórios:[/bold cyan] [white]{total_dirs}[/white]  |  "
+            f"[bold green]🎬 Arquivos de vídeo:[/bold green] [white]{total_files}[/white]",
+            border_style="cyan",
+            title="📊 Sumário do Diretório"
+        ))
+        self.console.print()
+        
+        # Criar árvore de diretórios
+        tree = Tree(f"📂 {directory}", style="bold magenta")
+        
+        # Ordenar diretórios (raiz primeiro, depois alfabeticamente)
+        sorted_dirs = sorted(dir_structure.keys(), key=lambda x: '' if x == '.' else x)
+        
+        for dir_name in sorted_dirs:
+            files = dir_structure[dir_name]
+            
+            if dir_name == '.':
+                # Arquivos na raiz
+                for file_info in files:
+                    tree.add(f"🎬 {file_info['filename']}", style="green")
+            else:
+                # Subdiretórios
+                dir_branch = tree.add(f"📁 {dir_name}", style="bold blue")
+                for file_info in sorted(files, key=lambda x: x['filename']):
+                    dir_branch.add(f"🎬 {file_info['filename']}", style="green")
+        
+        self.console.print(tree)
+        self.console.print()
+    
+    def show_pre_conversion_summary(
+        self,
+        input_folder: str,
+        output_folder: str,
+        video_files: List[str],
+        profile: Dict[str, Any]
+    ):
+        """Exibe sumário completo antes da conversão com opções de ação."""
+        from pathlib import Path
+        from rich.panel import Panel
+        from rich.text import Text
+        
+        self.console.print()
+        
+        # Painel de informações da conversão
+        info = Text()
+        info.append("📁 Pasta de Entrada: ", style="cyan")
+        info.append(f"{input_folder}\n", style="white")
+        info.append("💾 Pasta de Saída: ", style="cyan")
+        info.append(f"{output_folder}\n\n", style="white")
+        info.append("🎬 Perfil Selecionado:\n", style="bold magenta")
+        info.append(f"  Nome: ", style="cyan")
+        info.append(f"{profile.get('name', 'Custom')}\n", style="white")
+        info.append(f"  Codec: ", style="cyan")
+        info.append(f"{profile.get('codec', 'hevc_nvenc')}\n", style="white")
+        if profile.get('cq'):
+            info.append(f"  CQ: ", style="cyan")
+            info.append(f"{profile.get('cq')}\n", style="yellow")
+        if profile.get('preset'):
+            info.append(f"  Preset: ", style="cyan")
+            info.append(f"{profile.get('preset')}\n", style="white")
+        if profile.get('resolution'):
+            info.append(f"  Resolução: ", style="cyan")
+            info.append(f"{profile.get('resolution')}\n", style="blue")
+        
+        self.console.print(Panel(info, border_style="magenta", title="⚙️ Configurações da Conversão"))
+        self.console.print()
+        
+        # Exibir sumário de diretórios
+        self.show_directory_summary(input_folder, video_files)
+        
+        # Menu de opções
+        self.console.print()
+        self.console.print("[bold]O que deseja fazer?[/bold]\n")
+        
+        options = [
+            {"description": "🚀 Iniciar conversão agora", "shortcut": "1"},
+            {"description": "📋 Adicionar à fila", "shortcut": "2"},
+            {"description": "⚙️ Configurações avançadas", "shortcut": "3"},
+            {"description": "⏮ Voltar", "shortcut": "4"}
+        ]
+        
+        choice = self.show_menu("Opções de Conversão", options)
+        return choice
+    
+    def show_advanced_profile_editor(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        """Exibe editor de perfil para configurações avançadas antes da conversão."""
+        self.console.print()
+        self.print_header("⚙️ Configurações Avançadas", "Editar perfil antes da conversão")
+        
+        self.console.print("\n[bold cyan]Perfil atual:[/bold cyan]\n")
+        
+        # Exibir configurações atuais
+        info = Text()
+        info.append(f"Nome: ", style="cyan")
+        info.append(f"{profile.get('name', 'Custom')}\n", style="white")
+        info.append(f"Codec: ", style="cyan")
+        info.append(f"{profile.get('codec', 'hevc_nvenc')}\n", style="white")
+        info.append(f"CQ: ", style="cyan")
+        info.append(f"{profile.get('cq', 'auto')}\n", style="yellow")
+        info.append(f"Preset: ", style="cyan")
+        info.append(f"{profile.get('preset', 'p5')}\n", style="white")
+        info.append(f"Resolução: ", style="cyan")
+        info.append(f"{profile.get('resolution', 'original')}\n", style="blue")
+        info.append(f"Two-Pass: ", style="cyan")
+        info.append(f"{'Sim' if profile.get('two_pass') else 'Não'}\n", style="green" if profile.get('two_pass') else "dim")
+        info.append(f"HDR para SDR: ", style="cyan")
+        info.append(f"{'Sim' if profile.get('hdr_to_sdr') else 'Não'}\n", style="green" if profile.get('hdr_to_sdr') else "dim")
+        info.append(f"Deinterlace: ", style="cyan")
+        info.append(f"{'Sim' if profile.get('deinterlace') else 'Não'}\n", style="green" if profile.get('deinterlace') else "dim")
+        
+        self.console.print(Panel(info, border_style="cyan", title="Configurações Atuais"))
+        
+        # Menu de edição
+        while True:
+            self.console.print("\n[bold]O que deseja editar?[/bold]\n")
+            
+            edit_options = [
+                {"description": f"Codec: [white]{profile.get('codec', 'hevc_nvenc')}[/white]", "shortcut": "1"},
+                {"description": f"CQ: [yellow]{profile.get('cq', 'auto')}[/yellow]", "shortcut": "2"},
+                {"description": f"Preset: [white]{profile.get('preset', 'p5')}[/white]", "shortcut": "3"},
+                {"description": f"Resolução: [blue]{profile.get('resolution', 'original')}[/blue]", "shortcut": "4"},
+                {"description": f"Two-Pass: [{'green' if profile.get('two_pass') else 'dim'}]{'Sim' if profile.get('two_pass') else 'Não'}[/{'green' if profile.get('two_pass') else 'dim'}]", "shortcut": "5"},
+                {"description": f"HDR para SDR: [{'green' if profile.get('hdr_to_sdr') else 'dim'}]{'Sim' if profile.get('hdr_to_sdr') else 'Não'}[/{'green' if profile.get('hdr_to_sdr') else 'dim'}]", "shortcut": "6"},
+                {"description": f"Deinterlace: [{'green' if profile.get('deinterlace') else 'dim'}]{'Sim' if profile.get('deinterlace') else 'Não'}[/{'green' if profile.get('deinterlace') else 'dim'}]", "shortcut": "7"},
+                {"description": "✅ Concluir e voltar", "shortcut": "8"},
+                {"description": "❌ Cancelar edições", "shortcut": "9"}
+            ]
+            
+            choice = self.show_menu("Editar Configurações", edit_options)
+            
+            if choice == 0:  # Codec
+                codec_options = ["hevc_nvenc", "h264_nvenc", "av1_nvenc", "hevc_qsv", "h264_qsv", "hevc_amf", "h264_amf", "libx265", "libx264"]
+                codec_idx = self.show_options(codec_options, "Selecione o codec")
+                profile['codec'] = codec_options[codec_idx]
+            
+            elif choice == 1:  # CQ
+                new_cq = self.ask("Novo valor CQ (1-51, ou vazio para bitrate)", default=profile.get('cq', ''))
+                profile['cq'] = new_cq if new_cq else None
+                if not new_cq:
+                    bitrate = self.ask("Bitrate (ex: 10M, 5000K)", default=profile.get('bitrate', '10M'))
+                    profile['bitrate'] = bitrate
+            
+            elif choice == 2:  # Preset
+                preset_options = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"]
+                preset_idx = self.show_options(preset_options, "Selecione o preset")
+                profile['preset'] = preset_options[preset_idx]
+            
+            elif choice == 3:  # Resolução
+                resolution_options = ["", "480", "720", "1080", "1440", "2160"]
+                resolution_labels = ["Original", "480p", "720p", "1080p", "1440p (2K)", "2160p (4K)"]
+                resolution_idx = self.show_options(resolution_labels, "Selecione a resolução")
+                profile['resolution'] = resolution_options[resolution_idx] if resolution_idx > 0 else None
+            
+            elif choice == 4:  # Two-Pass
+                profile['two_pass'] = not profile.get('two_pass', False)
+                self.print_success(f"Two-Pass: {'Ativado' if profile['two_pass'] else 'Desativado'}")
+            
+            elif choice == 5:  # HDR para SDR
+                profile['hdr_to_sdr'] = not profile.get('hdr_to_sdr', False)
+                self.print_success(f"HDR para SDR: {'Ativado' if profile['hdr_to_sdr'] else 'Desativado'}")
+            
+            elif choice == 6:  # Deinterlace
+                profile['deinterlace'] = not profile.get('deinterlace', False)
+                self.print_success(f"Deinterlace: {'Ativado' if profile['deinterlace'] else 'Desativado'}")
+            
+            elif choice == 7:  # Concluir
+                self.print_success("Configurações atualizadas!")
+                return profile
+            
+            elif choice == 8:  # Cancelar
+                self.print_warning("Edições canceladas")
+                return profile
+        
+        return profile

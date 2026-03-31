@@ -257,104 +257,63 @@ class FFmpegWrapper:
         callback: Optional[Callable[[str], None]] = None
     ) -> tuple[bool, str]:
         """Executa comando de encoding."""
-        # DEBUG: Log comando FFmpeg completo
-        print("\n" + "="*80)
-        print("DEBUG: Comando FFmpeg que será executado:")
-        print(" ".join(command))
-        print("="*80 + "\n")
-        
         try:
-            # DEBUG: Antes de criar o processo
-            print(f"DEBUG: Criando processo FFmpeg...")
-            
-            # NÃO usar lock aqui - isso bloqueia outras threads de monitorar
             self._process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,  # Redirecionar stderr para stdout
+                stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1,  # Line buffered
+                bufsize=1,
                 universal_newlines=True
             )
             
-            # DEBUG: Processo criado
-            print(f"DEBUG: Processo criado com PID: {self._process.pid}")
-            
             output_lines = []
-            line_count = 0
-            
-            # Ler stdout (que inclui stderr redirecionado)
-            import select
             import time as time_module
             
             start_time = time_module.time()
             last_output_time = start_time
-            max_idle_seconds = 10  # Se ficar 10s sem output, verificar se processo morreu
+            max_idle_seconds = 10
             
             while True:
-                # Verificar se processo ainda está vivo
                 poll_result = self._process.poll()
                 if poll_result is not None:
-                    print(f"DEBUG: Processo terminou com returncode: {poll_result}")
-                    # Ler qualquer output restante
                     if self._process.stdout:
                         remaining = self._process.stdout.read()
                         if remaining:
                             for line in remaining.splitlines():
                                 if line.strip():
                                     output_lines.append(line.strip())
-                                    print(f"DEBUG [Final]: {line.strip()[:150]}")
+                                    if callback:
+                                        callback(line.strip())
                     break
                 
-                # Tentar ler linha com timeout
                 if self._process.stdout:
                     try:
                         output = self._process.stdout.readline()
                         if output:
                             last_output_time = time_module.time()
-                            line_count += 1
                             output_lines.append(output.strip())
-                            
-                            # DEBUG: Mostrar primeiras 10 e últimas 5 linhas
-                            if line_count <= 10 or line_count % 100 == 0:
-                                print(f"DEBUG [FFmpeg linha {line_count}]: {output.strip()[:150]}")
-                            
                             if callback:
                                 callback(output.strip())
                         else:
-                            # readline retornou vazio mas processo ainda vivo
                             time_module.sleep(0.1)
-                    except Exception as e:
-                        print(f"DEBUG: Erro lendo stdout: {e}")
+                    except Exception:
                         break
                 
-                # Verificar timeout de inatividade
                 if time_module.time() - last_output_time > max_idle_seconds:
                     if poll_result is None:
-                        print(f"DEBUG: AVISO - Sem output há {max_idle_seconds}s mas processo ainda vivo")
-                        last_output_time = time_module.time()  # Resetar para dar mais tempo
+                        last_output_time = time_module.time()
             
-            print(f"DEBUG: Total de linhas lidas: {line_count}")
-            
-            # Aguardar finalização
             returncode = self._process.wait(timeout=5)
             self._process = None
             
-            # DEBUG: Código de retorno
-            print(f"DEBUG: FFmpeg returncode: {returncode}")
-            print(f"DEBUG: Total output lines: {len(output_lines)}")
-            
             if returncode == 0:
-                print("DEBUG: Encoding SUCESSO")
                 return (True, 'Encoding completed successfully')
             else:
-                error_msg = '\n'.join(output_lines[-20:])  # Últimas 20 linhas
-                print(f"DEBUG: Encoding FALHOU. Últimas 20 linhas:")
-                print(error_msg)
+                error_msg = '\n'.join(output_lines[-20:])
                 return (False, error_msg)
                 
         except subprocess.TimeoutExpired:
-            print("DEBUG: TIMEOUT no encoding")
             if self._process:
                 self._process.terminate()
                 try:
@@ -364,9 +323,6 @@ class FFmpegWrapper:
             self._process = None
             return (False, 'Encoding timeout')
         except Exception as e:
-            print(f"DEBUG: EXCEÇÃO no encoding: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
             if self._process:
                 try:
                     self._process.terminate()
