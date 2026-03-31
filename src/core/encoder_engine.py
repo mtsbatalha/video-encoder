@@ -310,16 +310,27 @@ class EncoderEngine:
         print(f"🔍 DEBUG: Comando FFmpeg: {' '.join(command)}")
         
         def progress_callback(output: str):
-            # print(f"🔍 DEBUG: FFmpeg output: {output}")  # Comentado para não poluir muito
+            # 🔍 DEBUG: Log apenas primeiras 10 linhas para não poluir demais
+            if not hasattr(progress_callback, 'line_count'):
+                progress_callback.line_count = 0
+            
+            progress_callback.line_count += 1
+            if progress_callback.line_count <= 10 or progress_callback.line_count % 20 == 0:
+                print(f"🔍 CALLBACK #{progress_callback.line_count}: Recebeu linha: {repr(output[:100])}")
+            
             stats = parser.parse_line(output)
             
             if 'fps' in stats:
+                print(f"📈 CALLBACK: Atualizando monitor com FPS={stats['fps']}")
                 self.realtime_monitor.update_encoding_stats(fps=stats['fps'])
             if 'speed' in stats:
+                print(f"📈 CALLBACK: Atualizando monitor com Speed={stats['speed']}x")
                 self.realtime_monitor.update_encoding_stats(speed=stats['speed'])
             if 'bitrate' in stats:
+                print(f"📈 CALLBACK: Atualizando monitor com Bitrate={stats['bitrate']} Kbps")
                 self.realtime_monitor.update_encoding_stats(bitrate=stats['bitrate'])
             if 'current_time' in stats:
+                print(f"📈 CALLBACK: Atualizando progresso={stats.get('progress', 0):.1f}%, time={stats['current_time']:.1f}s")
                 self.realtime_monitor.update_progress(
                     progress=stats.get('progress', 0),
                     current_time=stats['current_time']

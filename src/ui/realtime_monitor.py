@@ -144,11 +144,18 @@ class RealTimeEncodingMonitor:
         """Atualiza estatísticas de encoding."""
         with self._lock:
             if fps is not None:
+                print(f"🎯 MONITOR: Recebeu FPS={fps}, atualizando de {self._encoding_stats['fps']} para {fps}")
                 self._encoding_stats['fps'] = fps
             if speed is not None:
+                print(f"🎯 MONITOR: Recebeu Speed={speed}x, atualizando de {self._encoding_stats['speed']} para {speed}")
                 self._encoding_stats['speed'] = speed
             if bitrate is not None:
+                print(f"🎯 MONITOR: Recebeu Bitrate={bitrate} Kbps, atualizando de {self._encoding_stats['bitrate']} para {bitrate}")
                 self._encoding_stats['bitrate'] = bitrate
+            
+            # Log do estado atual
+            if fps is not None or speed is not None or bitrate is not None:
+                print(f"📊 MONITOR: Estado atual - FPS={self._encoding_stats['fps']}, Speed={self._encoding_stats['speed']}x, Bitrate={self._encoding_stats['bitrate']} Kbps")
     
     def update_status(self, status: str):
         """Atualiza status."""
@@ -610,17 +617,33 @@ class FFmpegProgressParser:
         """Extrai estatísticas de uma linha de output."""
         stats = {}
         
+        # 🔍 DEBUG: Log da linha completa recebida (apenas se contiver indicadores de progresso)
+        if any(indicator in line.lower() for indicator in ['fps=', 'speed=', 'time=', 'frame=']):
+            print(f"🔍 PARSER DEBUG: Linha FFmpeg detectada: {repr(line[:150])}")  # Primeiros 150 chars
+        
         fps_match = self._fps_pattern.search(line)
         if fps_match:
-            stats['fps'] = float(fps_match.group(1))
+            fps_value = float(fps_match.group(1))
+            stats['fps'] = fps_value
+            print(f"✅ PARSER: FPS extraído = {fps_value}")
+        elif 'fps=' in line.lower():
+            print(f"⚠️ PARSER: 'fps=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
         
         speed_match = self._speed_pattern.search(line)
         if speed_match:
-            stats['speed'] = float(speed_match.group(1))
+            speed_value = float(speed_match.group(1))
+            stats['speed'] = speed_value
+            print(f"✅ PARSER: Speed extraído = {speed_value}x")
+        elif 'speed=' in line.lower():
+            print(f"⚠️ PARSER: 'speed=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
         
         bitrate_match = self._bitrate_pattern.search(line)
         if bitrate_match:
-            stats['bitrate'] = float(bitrate_match.group(1))
+            bitrate_value = float(bitrate_match.group(1))
+            stats['bitrate'] = bitrate_value
+            print(f"✅ PARSER: Bitrate extraído = {bitrate_value} Kbps")
+        elif 'bitrate=' in line.lower():
+            print(f"⚠️ PARSER: 'bitrate=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
         
         time_match = self._time_pattern.search(line)
         if time_match:
@@ -632,11 +655,18 @@ class FFmpegProgressParser:
             stats['current_time'] = current_seconds
             
             if self._duration_seconds > 0:
-                stats['progress'] = (current_seconds / self._duration_seconds) * 100
+                progress_pct = (current_seconds / self._duration_seconds) * 100
+                stats['progress'] = progress_pct
+                print(f"✅ PARSER: Progresso = {progress_pct:.1f}% (tempo: {current_seconds:.1f}s / {self._duration_seconds:.1f}s)")
+        elif 'time=' in line.lower():
+            print(f"⚠️ PARSER: 'time=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
         
         frame_match = self._frame_pattern.search(line)
         if frame_match:
             stats['frame'] = int(frame_match.group(1))
+        
+        if stats:
+            print(f"📊 PARSER: Stats completos extraídos: {stats}")
         
         return stats
     
