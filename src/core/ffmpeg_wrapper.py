@@ -270,6 +270,8 @@ class FFmpegWrapper:
                 universal_newlines=True
             )
             print(f"🔍 DEBUG: Subprocess criado com PID: {self._process.pid}")
+            print(f"🔍 DEBUG: stdout pipe válido? {self._process.stdout is not None}")
+            print(f"🔍 DEBUG: stderr pipe válido? {self._process.stderr is not None}")
             
             output_lines = []
             import time as time_module
@@ -278,11 +280,19 @@ class FFmpegWrapper:
             last_output_time = start_time
             max_idle_seconds = 300  # 5 minutos sem saída = possível hang
             
+            print(f"🔍 DEBUG: Entrando no loop principal de leitura...")
             # Loop principal de leitura da saída do FFmpeg
+            loop_iteration = 0
             while True:
+                loop_iteration += 1
+                if loop_iteration % 10 == 0:  # Log a cada 10 iterações
+                    print(f"🔍 DEBUG: Loop iteration {loop_iteration}, processo ainda rodando")
+                
                 # Verifica se o processo terminou
                 poll_result = self._process.poll()
+                print(f"🔍 DEBUG: poll_result = {poll_result}")
                 if poll_result is not None:
+                    print(f"🔍 DEBUG: Processo terminou detectado! returncode = {poll_result}")
                     # Processo terminou - lê qualquer saída restante
                     if self._process.stdout:
                         remaining = self._process.stdout.read()
@@ -297,7 +307,9 @@ class FFmpegWrapper:
                 # Lê uma linha da saída do FFmpeg
                 if self._process.stdout:
                     try:
+                        print(f"🔍 DEBUG: Tentando ler linha do stdout...")
                         output = self._process.stdout.readline()
+                        print(f"🔍 DEBUG: readline() retornou: {len(output) if output else 0} caracteres")
                         if output:
                             last_output_time = time_module.time()
                             output_lines.append(output.strip())
@@ -305,9 +317,11 @@ class FFmpegWrapper:
                                 callback(output.strip())
                         else:
                             # Sem saída disponível, espera um pouco antes de tentar novamente
+                            print(f"🔍 DEBUG: Nenhuma saída, aguardando 0.1s...")
                             time_module.sleep(0.1)
-                    except Exception:
+                    except Exception as e:
                         # Erro na leitura do pipe - continua tentando
+                        print(f"⚠️ DEBUG: Exceção ao ler stdout: {type(e).__name__}: {e}")
                         time_module.sleep(0.1)
                 
                 # Verifica timeout de inatividade (processo pode estar travado)
