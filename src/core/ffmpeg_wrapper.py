@@ -166,14 +166,38 @@ class FFmpegWrapper:
         deinterlace: bool = False,
         audio_tracks: Optional[List[int]] = None,
         subtitle_burn: bool = False,
-        plex_compatible: bool = True
+        plex_compatible: bool = True,
+        conversion_speed: Optional[str] = None,
+        hardware_category: Optional[str] = None
     ) -> List[str]:
-        """Constrói comando FFmpeg para encoding."""
+        """Constrói comando FFmpeg para encoding.
+        
+        Args:
+            input_path: Caminho do arquivo de entrada
+            output_path: Caminho do arquivo de saída
+            codec: Codec de vídeo
+            cq: Valor de qualidade (CQ/CRF/QP)
+            bitrate: Bitrate alvo (alternativa a CQ)
+            resolution: Resolução de saída (ex: '1080', '720')
+            preset: Preset do encoder
+            two_pass: Usar encoding de duas passadas
+            hdr_to_sdr: Converter HDR para SDR
+            deinterlace: Aplicar desentrelaçamento
+            audio_tracks: Lista de tracks de áudio para incluir
+            subtitle_burn: Queimar legendas no vídeo
+            plex_compatible: Criar arquivo compatível com Plex
+            conversion_speed: Velocidade de conversão (very_fast, fast, medium, slow)
+            hardware_category: Categoria de hardware (nvidia_gpu, amd_gpu, etc.)
+        """
         
         # ✅ FIX: Usa stderr padrão com -stats para output de progresso
         cmd = [self.ffmpeg, '-y', '-stats', '-i', input_path]
         
         video_params = self.CODEC_MAP.get(codec, self.CODEC_MAP['hevc_nvenc'])
+        
+        # Traduzir conversion_speed para preset se necessário
+        if conversion_speed and hardware_category:
+            preset = self.get_preset_from_speed(conversion_speed, hardware_category, preset)
         
         filter_complex = []
         
@@ -413,3 +437,50 @@ class FFmpegWrapper:
                         pass
                 finally:
                     self._process = None
+    
+    def get_preset_from_speed(self, conversion_speed: str, hardware_category: str, default_preset: str) -> str:
+        """Traduz velocidade de conversão para preset específico do hardware.
+        
+        Args:
+            conversion_speed: Velocidade (very_fast, fast, medium, slow)
+            hardware_category: Categoria de hardware (nvidia_gpu, amd_gpu, intel_igpu, amd_igpu, cpu)
+            default_preset: Preset padrão para fallback
+        
+        Returns:
+            Preset específico para o hardware
+        """
+        speed_to_preset = {
+            'nvidia_gpu': {
+                'very_fast': 'p2',
+                'fast': 'p3',
+                'medium': 'p5',
+                'slow': 'p6'
+            },
+            'amd_gpu': {
+                'very_fast': 'speed',
+                'fast': 'speed',
+                'medium': 'balanced',
+                'slow': 'quality'
+            },
+            'intel_igpu': {
+                'very_fast': 'fastest',
+                'fast': 'faster',
+                'medium': 'balanced',
+                'slow': 'slow'
+            },
+            'amd_igpu': {
+                'very_fast': 'speed',
+                'fast': 'speed',
+                'medium': 'balanced',
+                'slow': 'quality'
+            },
+            'cpu': {
+                'very_fast': 'veryfast',
+                'fast': 'fast',
+                'medium': 'medium',
+                'slow': 'slow'
+            }
+        }
+        
+        hw_map = speed_to_preset.get(hardware_category, {})
+        return hw_map.get(conversion_speed, default_preset)

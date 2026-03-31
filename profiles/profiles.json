@@ -26,7 +26,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_filmes_4k_h264": {
     "name": "NVIDIA Filmes 4K H264",
@@ -39,7 +40,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_filmes_1080p_hevc": {
     "name": "NVIDIA Filmes 1080p HEVC",
@@ -52,7 +54,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_filmes_1080p_h264": {
     "name": "NVIDIA Filmes 1080p H264",
@@ -65,7 +68,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_filmes_720p_hevc": {
     "name": "NVIDIA Filmes 720p HEVC",
@@ -78,7 +82,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "fast"
   },
   "nvidia_filmes_720p_h264": {
     "name": "NVIDIA Filmes 720p H264",
@@ -91,7 +96,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_series_4k_hevc": {
     "name": "NVIDIA Series 4K HEVC",
@@ -104,7 +110,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_series_4k_h264": {
     "name": "NVIDIA Series 4K H264",
@@ -117,7 +124,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_series_1080p_hevc": {
     "name": "NVIDIA Series 1080p HEVC",
@@ -130,7 +138,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_series_1080p_h264": {
     "name": "NVIDIA Series 1080p H264",
@@ -143,7 +152,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "nvidia_series_720p_hevc": {
     "name": "NVIDIA Series 720p HEVC",
@@ -156,7 +166,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "fast"
   },
   "nvidia_series_720p_h264": {
     "name": "NVIDIA Series 720p H264",
@@ -169,7 +180,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "nvidia_gpu"
+    "hardware_category": "nvidia_gpu",
+    "conversion_speed": "medium"
   },
   "amd_gpu_filmes_1080p_hevc": {
     "name": "AMD GPU Filmes 1080p HEVC",
@@ -182,7 +194,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "slow"
   },
   "amd_gpu_filmes_1080p_h264": {
     "name": "AMD GPU Filmes 1080p H264",
@@ -195,7 +208,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "slow"
   },
   "amd_gpu_filmes_720p_hevc": {
     "name": "AMD GPU Filmes 720p HEVC",
@@ -208,7 +222,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "medium"
   },
   "amd_gpu_filmes_720p_h264": {
     "name": "AMD GPU Filmes 720p H264",
@@ -221,7 +236,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "medium"
   },
   "amd_gpu_series_1080p_hevc": {
     "name": "AMD GPU Series 1080p HEVC",
@@ -234,7 +250,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "medium"
   },
   "amd_gpu_series_1080p_h264": {
     "name": "AMD GPU Series 1080p H264",
@@ -247,7 +264,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "medium"
   },
   "amd_gpu_series_720p_hevc": {
     "name": "AMD GPU Series 720p HEVC",
@@ -260,7 +278,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "fast"
   },
   "amd_gpu_series_720p_h264": {
     "name": "AMD GPU Series 720p H264",
@@ -273,7 +292,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_gpu"
+    "hardware_category": "amd_gpu",
+    "conversion_speed": "fast"
   },
   "intel_igpu_filmes_1080p_hevc": {
     "name": "Intel iGPU Filmes 1080p HEVC",
@@ -286,7 +306,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "medium"
   },
   "intel_igpu_filmes_1080p_h264": {
     "name": "Intel iGPU Filmes 1080p H264",
@@ -299,7 +320,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "medium"
   },
   "intel_igpu_filmes_720p_hevc": {
     "name": "Intel iGPU Filmes 720p HEVC",
@@ -312,7 +334,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "fast"
   },
   "intel_igpu_filmes_720p_h264": {
     "name": "Intel iGPU Filmes 720p H264",
@@ -325,7 +348,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "fast"
   },
   "intel_igpu_series_1080p_hevc": {
     "name": "Intel iGPU Series 1080p HEVC",
@@ -338,7 +362,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "medium"
   },
   "intel_igpu_series_1080p_h264": {
     "name": "Intel iGPU Series 1080p H264",
@@ -351,7 +376,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "medium"
   },
   "intel_igpu_series_720p_hevc": {
     "name": "Intel iGPU Series 720p HEVC",
@@ -364,7 +390,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "fast"
   },
   "intel_igpu_series_720p_h264": {
     "name": "Intel iGPU Series 720p H264",
@@ -377,7 +404,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "intel_igpu"
+    "hardware_category": "intel_igpu",
+    "conversion_speed": "fast"
   },
   "amd_igpu_filmes_1080p_hevc": {
     "name": "AMD iGPU Filmes 1080p HEVC",
@@ -390,7 +418,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "slow"
   },
   "amd_igpu_filmes_1080p_h264": {
     "name": "AMD iGPU Filmes 1080p H264",
@@ -403,7 +432,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "slow"
   },
   "amd_igpu_filmes_720p_hevc": {
     "name": "AMD iGPU Filmes 720p HEVC",
@@ -416,7 +446,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "medium"
   },
   "amd_igpu_filmes_720p_h264": {
     "name": "AMD iGPU Filmes 720p H264",
@@ -429,7 +460,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "medium"
   },
   "amd_igpu_series_1080p_hevc": {
     "name": "AMD iGPU Series 1080p HEVC",
@@ -442,7 +474,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "medium"
   },
   "amd_igpu_series_1080p_h264": {
     "name": "AMD iGPU Series 1080p H264",
@@ -455,7 +488,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "medium"
   },
   "amd_igpu_series_720p_hevc": {
     "name": "AMD iGPU Series 720p HEVC",
@@ -468,7 +502,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "fast"
   },
   "amd_igpu_series_720p_h264": {
     "name": "AMD iGPU Series 720p H264",
@@ -481,7 +516,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "amd_igpu"
+    "hardware_category": "amd_igpu",
+    "conversion_speed": "fast"
   },
   "cpu_qualidade_filmes_1080p_hevc": {
     "name": "CPU Qualidade Filmes 1080p HEVC",
@@ -494,7 +530,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "slow"
   },
   "cpu_qualidade_filmes_1080p_h264": {
     "name": "CPU Qualidade Filmes 1080p H264",
@@ -507,7 +544,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "slow"
   },
   "cpu_qualidade_series_1080p_hevc": {
     "name": "CPU Qualidade Series 1080p HEVC",
@@ -520,7 +558,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "medium"
   },
   "cpu_qualidade_series_1080p_h264": {
     "name": "CPU Qualidade Series 1080p H264",
@@ -533,7 +572,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "medium"
   },
   "cpu_rapido_filmes_1080p_hevc": {
     "name": "CPU Rápido Filmes 1080p HEVC",
@@ -546,7 +586,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "very_fast"
   },
   "cpu_rapido_filmes_1080p_h264": {
     "name": "CPU Rápido Filmes 1080p H264",
@@ -559,7 +600,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "very_fast"
   },
   "cpu_rapido_series_1080p_hevc": {
     "name": "CPU Rápido Series 1080p HEVC",
@@ -572,7 +614,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "very_fast"
   },
   "cpu_rapido_series_1080p_h264": {
     "name": "CPU Rápido Series 1080p H264",
@@ -585,7 +628,8 @@
     "deinterlace": false,
     "plex_compatible": true,
     "two_pass": false,
-    "hardware_category": "cpu"
+    "hardware_category": "cpu",
+    "conversion_speed": "very_fast"
   },
   "nvidia_filmes_4k_hevc_(editado)_(cópia)_20260331010610": {
     "name": "NVIDIA Filmes 4K HEVC (editado) (cópia)",

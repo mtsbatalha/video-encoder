@@ -456,9 +456,10 @@ class Menu:
                 {"description": f"HDR para SDR: [{'green' if profile.get('hdr_to_sdr') else 'dim'}]{'Sim' if profile.get('hdr_to_sdr') else 'Não'}[/{'green' if profile.get('hdr_to_sdr') else 'dim'}]", "shortcut": "6"},
                 {"description": f"Deinterlace: [{'green' if profile.get('deinterlace') else 'dim'}]{'Sim' if profile.get('deinterlace') else 'Não'}[/{'green' if profile.get('deinterlace') else 'dim'}]", "shortcut": "7"},
                 {"description": f"Bitrate: [yellow]{profile.get('bitrate', '10M')}[/yellow]", "shortcut": "8"},
-                {"description": "💾 Salvar como novo perfil", "shortcut": "9"},
-                {"description": "✅ Concluir e voltar", "shortcut": "10"},
-                {"description": "❌ Cancelar edições", "shortcut": "11"}
+                {"description": f"Velocidade: [green]{profile.get('conversion_speed', 'medium')}[/green]", "shortcut": "9"},
+                {"description": "💾 Salvar como novo perfil", "shortcut": "10"},
+                {"description": "✅ Concluir e voltar", "shortcut": "11"},
+                {"description": "❌ Cancelar edições", "shortcut": "12"}
             ]
             
             choice = self.show_menu("Editar Configurações", edit_options)
@@ -509,7 +510,32 @@ class Menu:
                 profile['cq'] = None  # Limpa CQ quando bitrate é definido
                 self.print_success(f"Bitrate atualizado para: {bitrate} (CQ desativado)")
             
-            elif choice == 8:  # Salvar como novo perfil
+            elif choice == 8:  # Velocidade de conversão
+                speed_options = ["very_fast", "fast", "medium", "slow"]
+                speed_labels = {
+                    "very_fast": "very_fast (Mais rápido, menor qualidade)",
+                    "fast": "fast (Rápido, qualidade balanceada)",
+                    "medium": "medium (Equilibrado)",
+                    "slow": "slow (Mais lento, melhor qualidade)"
+                }
+                speed_idx = self.show_options([speed_labels[s] for s in speed_options], "Selecione a velocidade de conversão")
+                selected_speed = speed_options[speed_idx]
+                profile['conversion_speed'] = selected_speed
+                
+                # Atualizar preset automaticamente baseado na velocidade e categoria de hardware
+                if profile_mgr:
+                    hardware_category = profile.get('hardware_category', 'cpu')
+                    profile['preset'] = profile_mgr.get_preset_from_speed(
+                        profile.get('codec', ''),
+                        selected_speed,
+                        hardware_category,
+                        profile.get('preset', 'medium')
+                    )
+                    self.print_success(f"Velocidade atualizada para: {selected_speed} (preset: {profile['preset']})")
+                else:
+                    self.print_success(f"Velocidade atualizada para: {selected_speed}")
+            
+            elif choice == 9:  # Salvar como novo perfil
                 if profile_mgr:
                     new_name = self.ask("Nome para o novo perfil:", default=f"{profile.get('name', 'Custom')} (cópia)")
                     new_description = self.ask("Descrição para o novo perfil (opcional):", default=profile.get('description', ''))
@@ -536,11 +562,11 @@ class Menu:
                 else:
                     self.print_error("Gerenciador de perfis não disponível")
             
-            elif choice == 9:  # Concluir
+            elif choice == 10:  # Concluir
                 self.print_success("Configurações atualizadas!")
                 return profile
             
-            elif choice == 10:  # Cancelar
+            elif choice == 11:  # Cancelar
                 self.print_warning("Edições canceladas")
                 return profile
         
