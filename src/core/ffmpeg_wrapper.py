@@ -311,8 +311,14 @@ class FFmpegWrapper:
                                         callback(line.strip())
                     break
                 
+                # ✅ DIAGNÓSTICO CRÍTICO: Verificar estado do stdout
+                print(f"🔧 DEBUG CRÍTICO: self._process = {self._process}")
+                print(f"🔧 DEBUG CRÍTICO: self._process.stdout = {self._process.stdout}")
+                print(f"🔧 DEBUG CRÍTICO: bool(self._process.stdout) = {bool(self._process.stdout if self._process else False)}")
+                
                 # ✅ DIAGNÓSTICO: Ler com timeout e buffer menor para capturar \r sem \n
                 if self._process.stdout:
+                    print(f"✅ DEBUG: Entrando no bloco de leitura do stdout")
                     try:
                         # Tentar ler com read() ao invés de readline() - captura \r também
                         import select
