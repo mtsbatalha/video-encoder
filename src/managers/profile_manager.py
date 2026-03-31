@@ -390,13 +390,16 @@ class ProfileManager:
     
     def get_profile(self, profile_id: str) -> Optional[Dict[str, Any]]:
         """Obtém perfil por ID."""
-        return self._profiles.get(profile_id)
+        profile_data = self._profiles.get(profile_id)
+        if profile_data:
+            return {"id": profile_id, **profile_data}
+        return None
     
     def get_profile_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """Obtém perfil por nome (case-insensitive)."""
         for profile_id, profile in self._profiles.items():
             if profile.get('name', '').lower() == name.lower():
-                return profile
+                return {"id": profile_id, **profile}
         return None
     
     def list_profiles(self) -> List[Dict[str, Any]]:

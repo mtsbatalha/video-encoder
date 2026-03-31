@@ -113,6 +113,9 @@ class MultiProfileConversionManager:
         for profile_id in profile_ids:
             profile = self.profile_mgr.get_profile(profile_id)
             if profile:
+                # 🔍 DEBUG: Validar que o perfil tem 'id'
+                if 'id' not in profile:
+                    raise KeyError(f"Perfil retornado sem chave 'id': {profile_id}")
                 profiles.append(profile)
         
         if not profiles:
