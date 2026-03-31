@@ -692,7 +692,9 @@ def run_folder_mode(args, config: ConfigManager, profile_mgr: ProfileManager, jo
 
 
 def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
-    """Novo workflow de conversão por pasta com scan recursivo."""
+    """Novo workflow de conversão por pasta com scan recursivo e suporte multi-perfil."""
+    from src.managers.multi_profile_conversion_manager import MultiProfileConversionManager, NamingConvention
+    
     menu = Menu(console)
 
     input_folder = menu.ask("Pasta de entrada (input)")
@@ -705,10 +707,14 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
     output_folder = menu.ask("Pasta de saída (output)")
     ensure_directory(output_folder)
 
-    mode_options = ["Usar perfil existente", "Configuração manual"]
+    mode_options = ["Usar perfil existente", "Selecionar múltiplos perfis", "Configuração manual"]
     mode_choice = menu.show_options(mode_options, "Como deseja configurar a conversão?")
 
+    selected_profile_ids = []
+    profile = None
+
     if mode_choice == 0:
+        # Perfil único existente
         profiles = profile_mgr.list_profiles()
         if not profiles:
             menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
@@ -716,7 +722,28 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
             return
         profile_idx = menu.show_options([p['name'] for p in profiles], "Perfis disponíveis")
         profile = profiles[profile_idx]
+        selected_profile_ids = [profile['id']]
+
+    elif mode_choice == 1:
+        # Múltiplos perfis
+        profiles = profile_mgr.list_profiles()
+        if not profiles:
+            menu.print_error("Nenhum perfil encontrado. Crie um perfil primeiro.")
+            input("\nPressione Enter para continuar...")
+            return
+        
+        selected_profile_ids = menu.show_multi_profile_selection(profiles, "Selecione os Perfis para Conversão")
+        
+        if not selected_profile_ids:
+            menu.print_error("Nenhum perfil selecionado")
+            input("\nPressione Enter para continuar...")
+            return
+        
+        # Usar primeiro perfil como referência para codec/cq
+        profile = profile_mgr.get_profile(selected_profile_ids[0])
+
     else:
+        # Configuração manual (perfil único)
         codec = menu.ask("Codec", default="hevc_nvenc")
         cq = menu.ask("CQ (Constant Quality, 1-51)", default="24")
         preset = menu.ask("Preset (p1-p7)", default="p5")
@@ -733,9 +760,10 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
             'deinterlace': False,
             'plex_compatible': True
         }
+        selected_profile_ids = [profile['id']]
 
-    codec = profile.get('codec', 'hevc_nvenc')
-    cq = profile.get('cq')
+    codec = profile.get('codec', 'hevc_nvenc') if profile else 'hevc_nvenc'
+    cq = profile.get('cq') if profile else None
 
     console.print(f"\n[cyan]Escaneando pasta recursivamente...[/cyan]")
     video_files = FileUtils.find_video_files(input_folder, recursive=True)
@@ -750,7 +778,95 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
     # Exibir sumário visual dos diretórios e arquivos
     menu.show_directory_summary(input_folder, video_files)
 
-    # Exibir sumário pré-conversão com opções
+    # Modo multi-perfil: gerar plano e exibir preview
+    if len(selected_profile_ids) > 1:
+        multi_mgr = MultiProfileConversionManager(
+            profile_manager=profile_mgr,
+            job_manager=job_mgr,
+            queue_manager=queue_mgr
+        )
+        
+        # Validar perfis
+        is_valid, msg = multi_mgr.validate_profiles_compatibility(selected_profile_ids)
+        if not is_valid:
+            menu.print_error(msg)
+            input("\nPressione Enter para continuar...")
+            return
+        
+        # Gerar plano de conversão
+        plan = multi_mgr.generate_conversion_plan(
+            input_files=video_files,
+            profile_ids=selected_profile_ids,
+            output_folder=output_folder,
+            options={
+                'preserve_structure': True,
+                'naming_convention': NamingConvention.PROFILE_SUFFIX.value
+            }
+        )
+        
+        # Exibir preview do plano
+        while True:
+            preview_action = menu.show_conversion_plan_preview(plan, video_files)
+            
+            if preview_action == 0:  # Confirmar
+                # Criar jobs para múltiplos perfis
+                jobs = multi_mgr.create_jobs_for_multiple_profiles(
+                    input_files=video_files,
+                    profile_ids=selected_profile_ids,
+                    output_folder=output_folder,
+                    options={
+                        'preserve_structure': True,
+                        'naming_convention': NamingConvention.PROFILE_SUFFIX.value
+                    }
+                )
+                
+                menu.print_success(f"{len(jobs)} jobs criados e adicionados à fila!")
+                console.print(f"[cyan]Fila total: {queue_mgr.get_queue_length()} jobs[/cyan]")
+                
+                # Copiar legendas
+                for job in jobs:
+                    source_dir = str(Path(job['input_path']).parent)
+                    output_dir = str(Path(job['output_path']).parent)
+                    FileUtils.copy_subtitles_to_output(source_dir, output_dir, Path(job['input_path']).stem)
+                
+                console.print(f"[cyan]Legendas copiadas para os diretórios de saída[/cyan]")
+                
+                # Perguntar se deseja processar agora
+                if menu.ask_confirm("Deseja processar a fila agora?", default=True):
+                    process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
+                
+                break
+            
+            elif preview_action == 1:  # Editar perfis
+                # Voltar para seleção de perfis
+                selected_profile_ids = menu.show_multi_profile_selection(
+                    profile_mgr.list_profiles(),
+                    "Selecione os Perfis para Conversão"
+                )
+                
+                if not selected_profile_ids:
+                    menu.print_warning("Operação cancelada")
+                    break
+                
+                # Regenerar plano
+                plan = multi_mgr.generate_conversion_plan(
+                    input_files=video_files,
+                    profile_ids=selected_profile_ids,
+                    output_folder=output_folder,
+                    options={
+                        'preserve_structure': True,
+                        'naming_convention': NamingConvention.PROFILE_SUFFIX.value
+                    }
+                )
+            
+            else:  # Cancelar
+                menu.print_warning("Operação cancelada")
+                input("\nPressione Enter para continuar...")
+                break
+        
+        return
+
+    # Modo perfil único: fluxo existente
     while True:
         action_choice = menu.show_pre_conversion_summary(
             input_folder=input_folder,

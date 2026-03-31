@@ -190,3 +190,160 @@ class FileUtils:
         free_bytes = FileUtils.get_disk_free_space(path)
         required_bytes = required_gb * (1024 ** 3)
         return free_bytes >= required_bytes
+    
+    @staticmethod
+    def generate_output_filename_for_profile(
+        input_path: str,
+        profile: Dict[str, Any],
+        output_folder: str,
+        preserve_structure: bool = True,
+        naming_convention: str = "profile_suffix"
+    ) -> str:
+        """
+        Gera nome de arquivo de output baseado no perfil.
+        
+        Args:
+            input_path: Caminho do arquivo de entrada
+            profile: Perfil de codificação
+            output_folder: Pasta de saída
+            preserve_structure: Preservar estrutura de diretórios
+            naming_convention: Convenção de nomenclatura
+                - "profile_suffix": filme_4k_hevc.mkv (default)
+                - "profile_prefix": 4k_hevc_filme.mkv
+                - "subfolder": 4k_hevc/filme.mkv
+        
+        Returns:
+            Caminho completo do arquivo de output
+        """
+        input_file = Path(input_path)
+        profile_suffix = FileUtils._get_profile_suffix(profile)
+        
+        if naming_convention == "profile_prefix":
+            # Prefixo: {perfil}_{nome}.{ext}
+            output_filename = f"{profile_suffix}_{input_file.stem}{input_file.suffix}"
+            output_dir = Path(output_folder)
+            
+        elif naming_convention == "subfolder":
+            # Subpasta: {perfil}/{nome}.{ext}
+            output_filename = f"{input_file.stem}{input_file.suffix}"
+            output_dir = Path(output_folder) / profile_suffix
+            
+        else:  # profile_suffix (default)
+            # Sufixo: {nome}_{perfil}.{ext}
+            output_filename = f"{input_file.stem}_{profile_suffix}{input_file.suffix}"
+            output_dir = Path(output_folder)
+        
+        # Preservar estrutura de diretórios se opção estiver habilitada
+        if preserve_structure and input_file.parent != input_file.parent.anchor:
+            try:
+                rel_path = input_file.parent.relative_to(input_file.parent.anchor)
+                if str(rel_path) != '.':
+                    output_dir = output_dir / rel_path
+            except ValueError:
+                pass
+        
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return str(output_dir / output_filename)
+    
+    @staticmethod
+    def _get_profile_suffix(profile: Dict[str, Any]) -> str:
+        """
+        Gera sufixo do perfil para nomenclatura.
+        
+        Args:
+            profile: Perfil de codificação
+            
+        Returns:
+            String de sufixo para nomenclatura
+        """
+        codec = profile.get('codec', 'unknown')
+        resolution = profile.get('resolution', '')
+        cq = profile.get('cq', '')
+        
+        # Extrair nome curto do codec
+        codec_short = codec.replace('_nvenc', '').replace('_amf', '').replace('_qsv', '')
+        
+        parts = []
+        
+        # Adicionar resolução se disponível
+        if resolution:
+            parts.append(resolution)
+        
+        # Adicionar codec
+        parts.append(codec_short)
+        
+        # Adicionar CQ se disponível
+        if cq:
+            parts.append(f'cq{cq}')
+        
+        # Se não houver partes, usar nome do perfil
+        if not parts:
+            return profile.get('name', 'profile').lower().replace(' ', '_')[:20]
+        
+        return '_'.join(parts)
+    
+    @staticmethod
+    def estimate_output_size(
+        input_size: int,
+        profile: Dict[str, Any],
+        duration_seconds: Optional[float] = None
+    ) -> int:
+        """
+        Estima tamanho do output baseado no perfil.
+        
+        Args:
+            input_size: Tamanho do arquivo de entrada em bytes
+            profile: Perfil de codificação
+            duration_seconds: Duração do vídeo em segundos (opcional)
+            
+        Returns:
+            Tamanho estimado em bytes
+        """
+        if input_size == 0:
+            return 0
+        
+        # Se perfil usa bitrate, calcular baseado na duração
+        if profile.get('bitrate'):
+            bitrate = FileUtils._parse_bitrate(profile['bitrate'])
+            # Usar duração fornecida ou estimar baseada no tamanho
+            if duration_seconds is None:
+                # Estimativa grosseira: assume 1 hora para cada GB
+                duration_seconds = 3600 * (input_size / (1024 ** 3))
+            return int(bitrate * duration_seconds / 8)  # bits → bytes
+        
+        # Se perfil usa CQ, usar fator de compressão
+        elif profile.get('cq'):
+            cq = int(profile['cq'])
+            # CQ menor = maior qualidade = maior arquivo
+            # Fator de compressão: 0.1 (CQ 18) a 0.5 (CQ 28)
+            compression_factor = 0.1 + ((cq - 18) / 10) * 0.4
+            compression_factor = max(0.05, min(0.8, compression_factor))
+            return int(input_size * compression_factor)
+        
+        # Fallback: estimativa conservadora (30% do original)
+        return int(input_size * 0.3)
+    
+    @staticmethod
+    def _parse_bitrate(bitrate_str: str) -> int:
+        """
+        Parse string de bitrate para bits/segundo.
+        
+        Exemplos:
+            "10M" → 10000000
+            "5000K" → 5000000
+            "1M" → 1000000
+        """
+        bitrate_str = str(bitrate_str).upper().strip()
+        multiplier = 1
+        
+        if bitrate_str.endswith('M'):
+            multiplier = 1_000_000
+            bitrate_str = bitrate_str[:-1]
+        elif bitrate_str.endswith('K'):
+            multiplier = 1_000
+            bitrate_str = bitrate_str[:-1]
+        
+        try:
+            return int(float(bitrate_str) * multiplier)
+        except ValueError:
+            return 5_000_000  # Fallback: 5M

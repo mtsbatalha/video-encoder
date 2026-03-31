@@ -516,3 +516,160 @@ class Menu:
                 return profile
         
         return profile
+    
+    def show_multi_profile_selection(
+        self,
+        profiles: List[Dict[str, Any]],
+        title: str = "Selecione os Perfis"
+    ) -> List[str]:
+        """
+        Exibe interface para seleção múltipla de perfis.
+        Usa checkboxes simulados com [x] e [ ].
+        
+        Args:
+            profiles: Lista de perfis disponíveis
+            title: Título da tela
+            
+        Returns:
+            Lista de IDs de perfis selecionados
+        """
+        from rich.table import Table
+        
+        selected = set()
+        
+        while True:
+            self.console.print(f"\n[bold]{title}[/bold]")
+            self.console.print("[dim](Digite o número para selecionar/desmarcar, Enter para confirmar)[/dim]\n")
+            
+            table = Table(title="Perfis Disponíveis", show_header=True, header_style="bold magenta")
+            table.add_column("#", style="dim", width=4)
+            table.add_column("Selecionado", style="white", width=14)
+            table.add_column("Nome", style="cyan", width=40)
+            table.add_column("Codec", style="green", width=15)
+            table.add_column("CQ", style="yellow", width=8)
+            
+            for i, profile in enumerate(profiles, 1):
+                selected_mark = "[green][x] Selecionado[/green]" if profile['id'] in selected else "[dim][ ][/dim]"
+                table.add_row(
+                    str(i),
+                    selected_mark,
+                    profile.get('name', 'N/A')[:38],
+                    profile.get('codec', '')[:13],
+                    profile.get('cq', '-') or '-'
+                )
+            
+            self.console.print(table)
+            
+            if selected:
+                self.console.print(f"\n[green]Perfis selecionados: {len(selected)}[/green]")
+                selected_profiles = [p for p in profiles if p['id'] in selected]
+                for p in selected_profiles:
+                    self.console.print(f"  • {p['name']}")
+            
+            choice = self.ask("Número do perfil (ou Enter para confirmar)", default="")
+            
+            if not choice:
+                if selected:
+                    break
+                else:
+                    self.print_warning("Selecione pelo menos um perfil")
+                    continue
+            
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(profiles):
+                    profile_id = profiles[idx]['id']
+                    if profile_id in selected:
+                        selected.remove(profile_id)
+                        self.print_info(f"Perfil desmarcado: {profiles[idx]['name']}")
+                    else:
+                        selected.add(profile_id)
+                        self.print_success(f"Perfil selecionado: {profiles[idx]['name']}")
+                else:
+                    self.print_error("Número inválido")
+            except ValueError:
+                self.print_error("Entrada inválida")
+        
+        return list(selected)
+    
+    def show_conversion_plan_preview(
+        self,
+        plan: Any,
+        video_files: List[str]
+    ) -> int:
+        """
+        Exibe preview do plano de conversão.
+        
+        Args:
+            plan: Objeto ConversionPlan
+            video_files: Lista de arquivos de entrada
+            
+        Returns:
+            Índice da ação escolhida:
+            0 - Confirmar e adicionar à fila
+            1 - Editar perfis
+            2 - Cancelar
+        """
+        from rich.panel import Panel
+        from rich.text import Text
+        from pathlib import Path
+        
+        self.console.print()
+        
+        # Painel de resumo
+        summary = Text()
+        summary.append("📊 RESUMO DA CONVERSÃO\n\n", style="bold magenta")
+        summary.append("Arquivos de entrada: ", style="cyan")
+        summary.append(f"{len(plan.input_files)}\n", style="white")
+        summary.append("Perfis selecionados: ", style="cyan")
+        summary.append(f"{len(plan.profiles)}\n", style="white")
+        summary.append("Total de jobs: ", style="bold yellow")
+        summary.append(f"{plan.total_jobs}\n\n", style="bold yellow")
+        
+        # Calcular tamanho estimado
+        total_gb = plan.estimated_total_size / (1024 ** 3)
+        summary.append("Tamanho estimado de saída: ", style="cyan")
+        summary.append(f"{total_gb:.2f} GB\n", style="green")
+        
+        self.console.print(Panel(summary, border_style="magenta", title="⚙️ Plano de Conversão"))
+        self.console.print()
+        
+        # Tabela de matriz de conversão
+        table = Table(title="Matriz de Conversão", show_header=True, header_style="bold cyan")
+        table.add_column("Arquivo", style="white", width=40)
+        
+        for profile in plan.profiles:
+            table.add_column(
+                profile.get('name', 'N/A')[:20],
+                style="green",
+                width=22
+            )
+        
+        # Agrupar jobs por arquivo de entrada
+        from collections import defaultdict
+        jobs_by_file = defaultdict(list)
+        for job in plan.jobs:
+            jobs_by_file[job.input_path].append(job)
+        
+        for input_file, jobs in jobs_by_file.items():
+            row = [Path(input_file).name[:38]]
+            for profile in plan.profiles:
+                matching_jobs = [j for j in jobs if j.profile_id == profile['id']]
+                if matching_jobs:
+                    row.append("[green]✓[/green]")
+                else:
+                    row.append("[dim]-[/dim]")
+            table.add_row(*row)
+        
+        self.console.print(table)
+        self.console.print()
+        
+        # Menu de ações
+        options = [
+            {"description": "✅ Confirmar e adicionar jobs à fila", "shortcut": "1"},
+            {"description": "✏️ Editar perfis", "shortcut": "2"},
+            {"description": "❌ Cancelar", "shortcut": "3"}
+        ]
+        
+        choice = self.show_menu("Ações", options)
+        return choice
