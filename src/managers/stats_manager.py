@@ -90,10 +90,10 @@ class StatsManager:
             else:
                 self._stats["failed_encodes"] += 1
                 if failure_reason:
-                    self._stats["failure_reasons"][failure_reason] += 1
+                    self._stats["failure_reasons"][failure_reason] = self._stats["failure_reasons"].get(failure_reason, 0) + 1
             
             hour_key = now.strftime("%Y-%m-%d %H:00")
-            self._stats["peak_hours"][hour_key] += 1
+            self._stats["peak_hours"][hour_key] = self._stats["peak_hours"].get(hour_key, 0) + 1
             
             history_entry = {
                 "timestamp": now.isoformat(),
