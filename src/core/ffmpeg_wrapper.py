@@ -277,6 +277,7 @@ class FFmpegWrapper:
                 # O encoder escolherá o formato CUDA nativo (p010le para 10-bit, nv12 para 8-bit)
                 # [FIX] Pipeline CUDA completo - removendo -pix_fmt para evitar conversão CPU
                 # O encoder escolherá o formato CUDA nativo (p010le para 10-bit, nv12 para 8-bit)
+                pass
             else:
                 # Pipeline CPU ou híbrido: especificar pix_fmt explicitamente
                 cmd.extend(['-pix_fmt', video_params['pix_fmt']])
