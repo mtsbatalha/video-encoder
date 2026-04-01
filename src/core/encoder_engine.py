@@ -68,9 +68,6 @@ class EncoderEngine:
         """Adiciona job à fila."""
         with self._lock:
             self._jobs[job.id] = job
-        print(
-            f"[ENCODER] add_job called: job_id={job.id[:8] if job.id else 'NO_ID'}, total jobs in _jobs: {len(self._jobs)}"
-        )
         return job.id
 
     def remove_job(self, job_id: str) -> bool:
@@ -213,9 +210,6 @@ class EncoderEngine:
     def _executor_loop(self):
         """Loop principal do executor."""
         while self._running:
-            print(
-                f"[ENCODER LOOP] iteration, _running={self._running}, _jobs count: {len(self._jobs)}, _active count: {len(self._active_jobs)}"
-            )
             self._pause_event.wait()
 
             with self._lock:
@@ -229,8 +223,6 @@ class EncoderEngine:
                     if job.status == EncodingStatus.PENDING
                 ]
 
-                print(f"[ENCODER LOOP] pending jobs found: {len(pending_jobs)}")
-
                 if not pending_jobs:
                     time.sleep(1)
                     continue
@@ -240,12 +232,6 @@ class EncoderEngine:
                 job.status = EncodingStatus.RUNNING
                 job.started_at = time.time()
                 self._active_jobs[job_id] = job
-                print(
-                    f"[ENCODER LOOP] About to execute job: {job_id[:8] if job_id else 'NO_ID'}"
-                )
-                print(
-                    f"[ENCODER LOOP] Job moved to active, _active count: {len(self._active_jobs)}"
-                )
 
             for callback in self._status_callbacks:
                 callback(job_id, EncodingStatus.RUNNING)
@@ -277,59 +263,35 @@ class EncoderEngine:
 
     def _execute_job(self, job: EncodingJob) -> tuple[bool, str]:
         """Executa job de encoding."""
-        print(
-            f"[EXECUTE] _execute_job START for job_id={job.id[:8] if job.id else 'NONE'}"
-        )
         from pathlib import Path
-
-        print(f"[EXECUTE] Path import done")
 
         try:
             input_file = Path(job.input_path)
             output_file = Path(job.output_path)
 
-            print(f"[EXECUTE] input_file = {input_file}")
-
             if not input_file.exists():
-                print(f"[EXECUTE] exists()={input_file.exists()}")
                 error_msg = f"Arquivo de entrada não existe: {job.input_path}"
                 return (False, error_msg)
 
-            print(f"[EXECUTE] exists()={input_file.exists()}")
-
             if not input_file.is_file():
-                print(f"[EXECUTE] is_file()={input_file.is_file()}")
                 error_msg = f"Caminho de entrada não é um arquivo: {job.input_path}"
                 return (False, error_msg)
 
-            print(f"[EXECUTE] is_file()={input_file.is_file()}")
-
             try:
                 output_file.parent.mkdir(parents=True, exist_ok=True)
-                print(f"[EXECUTE] output dir created: {output_file.parent}")
             except Exception as e:
                 error_msg = f"Erro ao criar diretório de saída: {e}"
                 return (False, error_msg)
 
-            print(f"[EXECUTE] about to get media info")
             profile = job.profile
 
             try:
-                print(f"[EXECUTE] calling ffmpeg.get_media_info()")
                 media_info = self.ffmpeg.get_media_info(job.input_path)
-                print(f"[EXECUTE] media_info retrieved: {media_info is not None}")
-                print(f"[EXECUTE] about to get duration")
                 duration = self.ffmpeg.get_duration(media_info)
-                print(f"[EXECUTE] duration = {duration}")
-                print(f"[EXECUTE] about to get video_streams")
                 video_streams = self.ffmpeg.get_video_streams(media_info)
-                print(
-                    f"[EXECUTE] video_streams count: {len(video_streams) if video_streams else 0}"
-                )
             except Exception as e:
                 return (False, f"Erro ao obter info do mídia: {e}")
 
-            print(f"[EXECUTE] about to start realtime_monitor")
             self.realtime_monitor.start(
                 description=f"Encoding: {job.input_path}",
                 total_duration=duration,
@@ -338,7 +300,6 @@ class EncoderEngine:
                 input_media_info=media_info,
                 profile=profile,
             )
-            print(f"[EXECUTE] realtime_monitor started")
 
             parser = FFmpegProgressParser(monitor=self.realtime_monitor)
             parser.set_duration(duration)
@@ -352,7 +313,6 @@ class EncoderEngine:
             self.realtime_monitor.add_debug_log(
                 f"Duration: {duration}s, Video streams: {len(video_streams)}"
             )
-            print(f"[EXECUTE] about to build encoding command")
             command = self.ffmpeg.build_encoding_command(
                 input_path=job.input_path,
                 output_path=job.output_path,
@@ -368,7 +328,6 @@ class EncoderEngine:
                 subtitle_burn=profile.get("subtitle_burn", False),
                 plex_compatible=profile.get("plex_compatible", True),
             )
-            print(f"[EXECUTE] command built: {command[0] if command else 'NONE'}...")
 
             def progress_callback(output: str):
                 stats = parser.parse_line(output)
@@ -421,11 +380,9 @@ class EncoderEngine:
                         )
 
             self.realtime_monitor.add_debug_log("Executando encoding...")
-            print(f"[EXECUTE] about to call ffmpeg.run_encoding()")
             success, error = self.ffmpeg.run_encoding(
                 command, callback=progress_callback
             )
-            print(f"[EXECUTE] ffmpeg.run_encoding returned: success={success}")
 
             if success:
                 self.realtime_monitor.add_debug_log("Encoding completado com sucesso")
@@ -437,12 +394,8 @@ class EncoderEngine:
 
             self.realtime_monitor.stop()
 
-            print(
-                f"[EXECUTE] returning: success={success}, error={error[:100] if error else 'NONE'}"
-            )
             return (success, error)
         except Exception as e:
-            print(f"[EXECUTE] EXCEPTION: {type(e).__name__}: {e}")
             import traceback
 
             traceback.print_exc()
