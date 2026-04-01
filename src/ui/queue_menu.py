@@ -171,9 +171,22 @@ class QueueMenuUI:
             
             if running:
                 self.console.print(f"[bold green]🔄 Jobs em execução: {len(running)}[/bold green]")
-                for job in running[:3]:
-                    progress = job.get('progress', 0)
-                    self.console.print(f"  • {job['id'][:8]}: {progress:.1f}%")
+                
+                # Exibir todos os jobs, com formatação especial para listas longas
+                max_inline_display = 10  # Exibir até 10 jobs inline
+                
+                if len(running) <= max_inline_display:
+                    # Lista compacta para poucos jobs
+                    for job in running:
+                        progress = job.get('progress', 0)
+                        self.console.print(f"  • {job['id'][:8]}: {progress:.1f}%")
+                else:
+                    # Lista compacta com indicador de muitos jobs
+                    for job in running[:5]:
+                        progress = job.get('progress', 0)
+                        self.console.print(f"  • {job['id'][:8]}: {progress:.1f}%")
+                    self.console.print(f"  [dim]... e mais {len(running) - 5} jobs[/dim]")
+                
                 self.console.print()
             elif pending and queue:
                 self.console.print(f"[bold yellow]⏳ Jobs pendentes: {len(pending)}[/bold yellow]")
