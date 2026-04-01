@@ -348,7 +348,9 @@ class FFmpegWrapper:
                     if self._process.stdout:
                         remaining = self._process.stdout.read()
                         if remaining:
-                            for line in remaining.splitlines():
+                            # ✅ FIX: Decodifica bytes para string antes de processar
+                            remaining_text = remaining.decode('utf-8', errors='ignore')
+                            for line in remaining_text.splitlines():
                                 if line.strip():
                                     output_lines.append(line.strip())
                                     if callback:
