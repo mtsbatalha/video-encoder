@@ -323,11 +323,17 @@ class FFmpegWrapper:
                 input_path,
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            print(
+                f"[FFmpegWrapper] get_video_resolution: ffprobe returned code={result.returncode}, stdout='{result.stdout.strip()[:50]}'"
+            )
             if result.returncode == 0 and result.stdout.strip():
                 parts = result.stdout.strip().split(",")
                 if len(parts) == 2:
                     width = int(parts[0])
                     height = int(parts[1])
+                    print(
+                        f"[FFmpegWrapper] get_video_resolution: returning {width}x{height}"
+                    )
                     return (width, height)
         except Exception as e:
             print(f"[FFmpegWrapper] Warning: Could not detect video resolution: {e}")

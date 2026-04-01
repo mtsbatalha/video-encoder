@@ -609,18 +609,12 @@ def process_queue_cli(
     encoder.add_progress_callback(on_progress)
     encoder.add_status_callback(on_status)
     encoder.start()
-    console.print(
-        f"[cyan][i] Encoder thread started, _running={encoder._running}[/cyan]"
-    )
 
     try:
         while True:
             running_count = len(encoder.get_active_jobs())
             pending_in_encoder = len(encoder.get_pending_jobs())
             queue_length = queue_mgr.get_queue_length()
-            console.print(
-                f"[dim] Loop: running={running_count}, pending={pending_in_encoder}, queue={queue_length}[/dim]"
-            )
 
             if (running_count + pending_in_encoder) < 1:
                 next_job = queue_mgr.pop_next_job()
@@ -632,12 +626,6 @@ def process_queue_cli(
                         profile=next_job["profile"],
                     )
                     encoder.add_job(encoding_job)
-                    console.print(
-                        f"[cyan] Job added to encoder: {encoding_job.id[:8]}, total pending: {len(encoder.get_pending_jobs())}, total active: {len(encoder.get_active_jobs())}[/cyan]"
-                    )
-                    console.print(
-                        f"[cyan]Iniciando job: {next_job['job_id'][:8]}[/cyan]"
-                    )
 
             queue_empty = queue_mgr.get_queue_length() == 0
             if not running_count and not pending_in_encoder and queue_empty:
