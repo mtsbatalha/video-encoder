@@ -210,9 +210,6 @@ class EncoderEngine:
     def _executor_loop(self):
         """Loop principal do executor."""
         while self._running:
-            print(
-                f"[ENCODER] _executor_loop iteration, _running={self._running}, jobs in _jobs: {len(self._jobs)}, active: {len(self._active_jobs)}"
-            )
             self._pause_event.wait()
 
             with self._lock:
@@ -225,7 +222,6 @@ class EncoderEngine:
                     for jid, job in self._jobs.items()
                     if job.status == EncodingStatus.PENDING
                 ]
-                print(f"[ENCODER] Found {len(pending_jobs)} pending jobs")
 
                 if not pending_jobs:
                     time.sleep(1)
@@ -240,7 +236,6 @@ class EncoderEngine:
             for callback in self._status_callbacks:
                 callback(job_id, EncodingStatus.RUNNING)
 
-            print(f"[ENCODER] About to execute job {job_id[:8] if job_id else 'NO_ID'}")
             success, error = self._execute_job(job)
 
             with self._lock:
@@ -271,25 +266,16 @@ class EncoderEngine:
         from pathlib import Path
 
         try:
-            print(
-                f"[ENCODER _execute_job] START - job_id={job.id[:8] if job.id else 'NO_ID'}, input={job.input_path}"
-            )
-
             input_file = Path(job.input_path)
             output_file = Path(job.output_path)
 
             if not input_file.exists():
                 error_msg = f"Arquivo de entrada não existe: {job.input_path}"
-                print(f"[ENCODER _execute_job] Input file does not exist")
                 return (False, error_msg)
 
             if not input_file.is_file():
                 error_msg = f"Caminho de entrada não é um arquivo: {job.input_path}"
                 return (False, error_msg)
-
-            print(
-                f"[ENCODER _execute_job] Input file check passed: {input_file.exists()}"
-            )
 
             try:
                 output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -297,23 +283,14 @@ class EncoderEngine:
                 error_msg = f"Erro ao criar diretório de saída: {e}"
                 return (False, error_msg)
 
-            print(f"[ENCODER _execute_job] Output dir created, about to get media info")
-
             profile = job.profile
-            print(f"[ENCODER _execute_job] Getting media info for: {job.input_path}")
 
             try:
                 media_info = self.ffmpeg.get_media_info(job.input_path)
-                print(
-                    f"[ENCODER _execute_job] Media info retrieved, getting duration..."
-                )
                 duration = self.ffmpeg.get_duration(media_info)
                 video_streams = self.ffmpeg.get_video_streams(media_info)
             except Exception as e:
-                print(f"[ENCODER _execute_job] ERROR getting media info: {e}")
                 return (False, f"Erro ao obter info do mídia: {e}")
-
-            print(f"[ENCODER _execute_job] Media info retrieved, duration={duration}")
 
             self.realtime_monitor.start(
                 description=f"Encoding: {job.input_path}",
@@ -323,8 +300,6 @@ class EncoderEngine:
                 input_media_info=media_info,
                 profile=profile,
             )
-
-            print(f"[ENCODER _execute_job] Realtime monitor started")
 
             parser = FFmpegProgressParser(monitor=self.realtime_monitor)
             parser.set_duration(duration)
@@ -352,10 +327,6 @@ class EncoderEngine:
                 audio_tracks=profile.get("audio_tracks"),
                 subtitle_burn=profile.get("subtitle_burn", False),
                 plex_compatible=profile.get("plex_compatible", True),
-            )
-
-            print(
-                f"[ENCODER _execute_job] Encoding command built: {command[:100] if command else 'NONE'}..."
             )
 
             def progress_callback(output: str):
@@ -409,13 +380,8 @@ class EncoderEngine:
                         )
 
             self.realtime_monitor.add_debug_log("Executando encoding...")
-            print(f"[ENCODER _execute_job] About to call ffmpeg.run_encoding()")
             success, error = self.ffmpeg.run_encoding(
                 command, callback=progress_callback
-            )
-            print(f"[ENCODER _execute_job] ffmpeg.run_encoding() completed")
-            print(
-                f"[ENCODER _execute_job] ffmpeg.run_encoding returned: success={success}, error={error}"
             )
 
             if success:
@@ -430,7 +396,6 @@ class EncoderEngine:
 
             return (success, error)
         except Exception as e:
-            print(f"[ENCODER _execute_job] Outer exception caught: {e}")
             return (False, str(e))
 
     def set_pause(self, paused: bool):

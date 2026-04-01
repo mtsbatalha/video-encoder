@@ -7,76 +7,120 @@ from typing import Optional, Dict, List, Any, Callable
 
 class FFmpegWrapper:
     """Wrapper para comandos FFmpeg com suporte a NVENC."""
-    
+
     CODEC_MAP = {
-        'hevc_nvenc': {'codec': 'hevc_nvenc', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-cq'},
-        'h264_nvenc': {'codec': 'h264_nvenc', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-cq'},
-        'av1_nvenc': {'codec': 'av1_nvenc', 'pix_fmt': 'yuv420p10le', 'profile': 'main', 'cq_param': '-cq'},
-        'hevc_amf': {'codec': 'hevc_amf', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-qp_i'},
-        'h264_amf': {'codec': 'h264_amf', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-qp_i'},
-        'hevc_qsv': {'codec': 'hevc_qsv', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-q'},
-        'h264_qsv': {'codec': 'h264_qsv', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-q'},
-        'libx265': {'codec': 'libx265', 'pix_fmt': 'yuv420p10le', 'profile': 'main10', 'cq_param': '-crf'},
-        'libx264': {'codec': 'libx264', 'pix_fmt': 'yuv420p', 'profile': 'high', 'cq_param': '-crf'}
+        "hevc_nvenc": {
+            "codec": "hevc_nvenc",
+            "pix_fmt": "yuv420p10le",
+            "profile": "main10",
+            "cq_param": "-cq",
+        },
+        "h264_nvenc": {
+            "codec": "h264_nvenc",
+            "pix_fmt": "yuv420p",
+            "profile": "high",
+            "cq_param": "-cq",
+        },
+        "av1_nvenc": {
+            "codec": "av1_nvenc",
+            "pix_fmt": "yuv420p10le",
+            "profile": "main",
+            "cq_param": "-cq",
+        },
+        "hevc_amf": {
+            "codec": "hevc_amf",
+            "pix_fmt": "yuv420p10le",
+            "profile": "main10",
+            "cq_param": "-qp_i",
+        },
+        "h264_amf": {
+            "codec": "h264_amf",
+            "pix_fmt": "yuv420p",
+            "profile": "high",
+            "cq_param": "-qp_i",
+        },
+        "hevc_qsv": {
+            "codec": "hevc_qsv",
+            "pix_fmt": "yuv420p10le",
+            "profile": "main10",
+            "cq_param": "-q",
+        },
+        "h264_qsv": {
+            "codec": "h264_qsv",
+            "pix_fmt": "yuv420p",
+            "profile": "high",
+            "cq_param": "-q",
+        },
+        "libx265": {
+            "codec": "libx265",
+            "pix_fmt": "yuv420p10le",
+            "profile": "main10",
+            "cq_param": "-crf",
+        },
+        "libx264": {
+            "codec": "libx264",
+            "pix_fmt": "yuv420p",
+            "profile": "high",
+            "cq_param": "-crf",
+        },
     }
-    
-    def __init__(self, ffmpeg_path: Optional[str] = None, ffprobe_path: Optional[str] = None):
-        self.ffmpeg = ffmpeg_path or shutil.which('ffmpeg') or 'ffmpeg'
-        self.ffprobe = ffprobe_path or shutil.which('ffprobe') or 'ffprobe'
+
+    def __init__(
+        self, ffmpeg_path: Optional[str] = None, ffprobe_path: Optional[str] = None
+    ):
+        self.ffmpeg = ffmpeg_path or shutil.which("ffmpeg") or "ffmpeg"
+        self.ffprobe = ffprobe_path or shutil.which("ffprobe") or "ffprobe"
         self._process: Optional[subprocess.Popen] = None
         self._lock = threading.Lock()
-        
+
     def verify_installation(self) -> bool:
         """Verifica se FFmpeg e FFprobe estão disponíveis."""
         try:
             ffmpeg_result = subprocess.run(
-                [self.ffmpeg, '-version'],
-                capture_output=True,
-                text=True,
-                timeout=10
+                [self.ffmpeg, "-version"], capture_output=True, text=True, timeout=10
             )
             ffprobe_result = subprocess.run(
-                [self.ffprobe, '-version'],
-                capture_output=True,
-                text=True,
-                timeout=10
+                [self.ffprobe, "-version"], capture_output=True, text=True, timeout=10
             )
             return ffmpeg_result.returncode == 0 and ffprobe_result.returncode == 0
         except Exception:
             return False
-    
+
     def get_nvenc_codecs(self) -> List[str]:
         """Retorna lista de codecs NVENC disponíveis."""
         try:
             result = subprocess.run(
-                [self.ffmpeg, '-encoders'],
-                capture_output=True,
-                text=True,
-                timeout=10
+                [self.ffmpeg, "-encoders"], capture_output=True, text=True, timeout=10
             )
             codecs = []
-            for line in result.stdout.split('\n'):
-                if 'nvenc' in line.lower():
+            for line in result.stdout.split("\n"):
+                if "nvenc" in line.lower():
                     parts = line.split()
                     if len(parts) >= 2:
                         codecs.append(parts[1])
             return codecs
         except Exception:
             return []
-    
+
     def get_all_video_codecs(self) -> List[str]:
         """Retorna todos os codecs de vídeo disponíveis."""
         try:
             result = subprocess.run(
-                [self.ffmpeg, '-encoders'],
-                capture_output=True,
-                text=True,
-                timeout=10
+                [self.ffmpeg, "-encoders"], capture_output=True, text=True, timeout=10
             )
             codecs = []
-            target_codecs = ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc', 'hevc_amf', 'h264_amf', 
-                           'hevc_qsv', 'h264_qsv', 'libx265', 'libx264']
-            for line in result.stdout.split('\n'):
+            target_codecs = [
+                "hevc_nvenc",
+                "h264_nvenc",
+                "av1_nvenc",
+                "hevc_amf",
+                "h264_amf",
+                "hevc_qsv",
+                "h264_qsv",
+                "libx265",
+                "libx264",
+            ]
+            for line in result.stdout.split("\n"):
                 for codec in target_codecs:
                     if codec in line.lower():
                         parts = line.split()
@@ -86,34 +130,32 @@ class FFmpegWrapper:
             return codecs
         except Exception:
             return []
-    
+
     def is_codec_available(self, codec: str) -> bool:
         """Verifica se codec específico está disponível."""
         try:
             result = subprocess.run(
-                [self.ffmpeg, '-encoders'],
-                capture_output=True,
-                text=True,
-                timeout=10
+                [self.ffmpeg, "-encoders"], capture_output=True, text=True, timeout=10
             )
             return codec.lower() in result.stdout.lower()
         except Exception:
             return False
-    
+
     def is_cuda_available(self) -> bool:
         """
         Verifica se aceleração CUDA está disponível para decodificação.
-        
+
         Retorna True apenas se:
         1. pynvml estiver instalado E GPUs NVIDIA forem detectadas, OU
         2. O teste de decodificação CUDA com FFmpeg for bem-sucedido
-        
+
         Nota: Ter o codec hevc_nvenc disponível não significa que CUDA está disponível
         para decodificação - apenas que encoding NVENC está disponível.
         """
         # Primeiro, tenta usar pynvml para detecção precisa
         try:
             import pynvml
+
             try:
                 pynvml.nvmlInit()
                 device_count = pynvml.nvmlDeviceGetCount()
@@ -130,9 +172,18 @@ class FFmpegWrapper:
             # Verifica se o dispositivo CUDA está disponível via nvidia-smi ou testes FFmpeg
             try:
                 import subprocess
+
                 # Tenta executar um comando simples para verificar se CUDA está disponível
-                result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
-                                      capture_output=True, text=True, timeout=10)
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=name,memory.total",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
                 if result.returncode == 0 and result.stdout.strip():
                     # Se nvidia-smi funciona e retorna resultados, provavelmente temos CUDA
                     return True
@@ -141,89 +192,156 @@ class FFmpegWrapper:
                 pass
             except Exception:
                 pass
-            
+
             # Se nvidia-smi não estiver disponível, tenta um teste prático com FFmpeg
             try:
                 # Testa se conseguimos usar aceleração CUDA com FFmpeg
-                result = subprocess.run([self.ffmpeg, '-hwaccels'],
-                                      capture_output=True, text=True, timeout=10)
-                if 'cuda' in result.stdout.lower():
+                result = subprocess.run(
+                    [self.ffmpeg, "-hwaccels"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if "cuda" in result.stdout.lower():
                     # Verifica se temos dispositivos CUDA disponíveis
-                    result_caps = subprocess.run([self.ffmpeg, '-f', 'lavfi', '-i', 'nullsrc=size=1920x1080',
-                                                '-c:v', 'h264_nvenc', '-frames:v', '1', '-f', 'null', '-', '-v', 'verbose'],
-                                               capture_output=True, text=True, timeout=15)
+                    result_caps = subprocess.run(
+                        [
+                            self.ffmpeg,
+                            "-f",
+                            "lavfi",
+                            "-i",
+                            "nullsrc=size=1920x1080",
+                            "-c:v",
+                            "h264_nvenc",
+                            "-frames:v",
+                            "1",
+                            "-f",
+                            "null",
+                            "-",
+                            "-v",
+                            "verbose",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
                     # Se não houver erro de "No CUDA capable devices found", CUDA deve estar disponível
-                    if 'No CUDA capable devices found' not in result_caps.stderr:
+                    if "No CUDA capable devices found" not in result_caps.stderr:
                         return True
             except Exception:
                 pass
-            
+
             # Se tudo falhar, retorna False
             return False
         except Exception:
             return False
-    
+
     def get_media_info(self, input_path: str) -> Dict[str, Any]:
         """Obtém informações detalhadas do arquivo de mídia."""
         try:
             result = subprocess.run(
-                [self.ffprobe, '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', input_path],
+                [
+                    self.ffprobe,
+                    "-v",
+                    "quiet",
+                    "-print_format",
+                    "json",
+                    "-show_format",
+                    "-show_streams",
+                    input_path,
+                ],
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
             )
             if result.returncode == 0:
                 return json.loads(result.stdout)
             return {}
         except Exception:
             return {}
-    
+
     def get_video_streams(self, info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extrai streams de vídeo das informações da mídia."""
-        streams = info.get('streams', [])
-        return [s for s in streams if s.get('codec_type') == 'video']
-    
+        streams = info.get("streams", [])
+        return [s for s in streams if s.get("codec_type") == "video"]
+
     def get_audio_streams(self, info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extrai streams de áudio das informações da mídia."""
-        streams = info.get('streams', [])
-        return [s for s in streams if s.get('codec_type') == 'audio']
-    
+        streams = info.get("streams", [])
+        return [s for s in streams if s.get("codec_type") == "audio"]
+
     def get_subtitle_streams(self, info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extrai streams de legenda das informações da mídia."""
-        streams = info.get('streams', [])
-        return [s for s in streams if s.get('codec_type') == 'subtitle']
-    
+        streams = info.get("streams", [])
+        return [s for s in streams if s.get("codec_type") == "subtitle"]
+
     def get_duration(self, info: Dict[str, Any]) -> float:
         """Retorna duração em segundos."""
-        format_info = info.get('format', {})
-        return float(format_info.get('duration', 0))
-    
+        format_info = info.get("format", {})
+        return float(format_info.get("duration", 0))
+
     def get_resolution(self, video_stream: Dict[str, Any]) -> tuple:
         """Retorna resolução (largura, altura)."""
-        width = video_stream.get('width', 0)
-        height = video_stream.get('height', 0)
+        width = video_stream.get("width", 0)
+        height = video_stream.get("height", 0)
         return (width, height)
-    
+
     def get_hdr_info(self, video_stream: Dict[str, Any]) -> bool:
         """Verifica se o vídeo é HDR."""
-        color_transfer = video_stream.get('color_transfer', '')
-        color_primaries = video_stream.get('color_primaries', '')
-        return color_transfer in ['smpte2084', 'arib-std-b67'] or color_primaries in ['bt2020']
-    
+        color_transfer = video_stream.get("color_transfer", "")
+        color_primaries = video_stream.get("color_primaries", "")
+        return color_transfer in ["smpte2084", "arib-std-b67"] or color_primaries in [
+            "bt2020"
+        ]
+
     def is_interlaced(self, video_stream: Dict[str, Any]) -> bool:
         """Verifica se o vídeo é entrelaçado."""
-        field_order = video_stream.get('field_order', 'progressive')
-        return field_order not in ['progressive', 'unknown', 'tt', 'bb']
-    
+        field_order = video_stream.get("field_order", "progressive")
+        return field_order not in ["progressive", "unknown", "tt", "bb"]
+
+    def get_video_resolution(self, input_path: str) -> Optional[tuple[int, int]]:
+        """
+        Obtém a resolução do vídeo de entrada via ffprobe.
+
+        Args:
+            input_path: Caminho do arquivo de vídeo
+
+        Returns:
+            Tupla (width, height) ou None se não for possível detectar
+        """
+        try:
+            cmd = [
+                self.ffprobe,
+                "-v",
+                "quiet",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "csv=p=0",
+                input_path,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0 and result.stdout.strip():
+                parts = result.stdout.strip().split(",")
+                if len(parts) == 2:
+                    width = int(parts[0])
+                    height = int(parts[1])
+                    return (width, height)
+        except Exception as e:
+            print(f"[FFmpegWrapper] Warning: Could not detect video resolution: {e}")
+        return None
+
     def build_encoding_command(
         self,
         input_path: str,
         output_path: str,
-        codec: str = 'hevc_nvenc',
+        codec: str = "hevc_nvenc",
         cq: Optional[str] = None,
         bitrate: Optional[str] = None,
         resolution: Optional[str] = None,
-        preset: str = 'p5',
+        preset: str = "p5",
         two_pass: bool = False,
         hdr_to_sdr: bool = False,
         deinterlace: bool = False,
@@ -232,10 +350,10 @@ class FFmpegWrapper:
         plex_compatible: bool = True,
         conversion_speed: Optional[str] = None,
         hardware_category: Optional[str] = None,
-        cuda_accel: bool = True
+        cuda_accel: bool = True,
     ) -> List[str]:
         """Constrói comando FFmpeg para encoding.
-        
+
         Args:
             input_path: Caminho do arquivo de entrada
             output_path: Caminho do arquivo de saída
@@ -254,102 +372,145 @@ class FFmpegWrapper:
             hardware_category: Categoria de hardware (nvidia_gpu, amd_gpu, etc.)
             cuda_accel: Habilitar aceleração CUDA para codecs NVIDIA (default: True)
         """
-        
+
         # [FIX] Usa stderr padrão com -stats para output de progresso
         # [CUDA ACCEL] Adiciona flags de aceleração hardware para codecs NVIDIA
-        cmd = [self.ffmpeg, '-y', '-stats']
-        
+        cmd = [self.ffmpeg, "-y", "-stats"]
+
         # [FIX] Verifica se CUDA está realmente disponível antes de usar codecs NVENC
         # Se CUDA não estiver disponível, fallback para codec de software equivalente
         cuda_available = cuda_accel and self.is_cuda_available()
-        
+
         # Fallback automático para codec de software se CUDA não disponível
         original_codec = codec
-        if not cuda_available and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
-            if codec == 'hevc_nvenc':
-                codec = 'libx265'  # Fallback para HEVC software
-            elif codec == 'h264_nvenc':
-                codec = 'libx264'  # Fallback para H264 software
-            elif codec == 'av1_nvenc':
-                codec = 'libx265'  # Fallback para HEVC (AV1 software não prático)
-            print(f"[FFmpegWrapper] CUDA não disponível. Fallback de {original_codec} para {codec}")
-        
-        if cuda_available and original_codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
-            cmd.extend(['-hwaccel', 'cuda'])
-            # Só usar output format cuda se não tiver conversão HDR (que precisa filtros CPU)
-            if not hdr_to_sdr:
-                cmd.extend(['-hwaccel_output_format', 'cuda'])
-        
-        cmd.extend(['-i', input_path])
-        
-        video_params = self.CODEC_MAP.get(codec, self.CODEC_MAP['hevc_nvenc'])
-        
+        if not cuda_available and codec in ["hevc_nvenc", "h264_nvenc", "av1_nvenc"]:
+            if codec == "hevc_nvenc":
+                codec = "libx265"  # Fallback para HEVC software
+            elif codec == "h264_nvenc":
+                codec = "libx264"  # Fallback para H264 software
+            elif codec == "av1_nvenc":
+                codec = "libx265"  # Fallback para HEVC (AV1 software não prático)
+            print(
+                f"[FFmpegWrapper] CUDA não disponível. Fallback de {original_codec} para {codec}"
+            )
+
+        if cuda_available and original_codec in [
+            "hevc_nvenc",
+            "h264_nvenc",
+            "av1_nvenc",
+        ]:
+            # Smart detection: only use CUDA hwaccel for non-4K files
+            # 4K+ files (width >= 3840) use CPU decoding to avoid VRAM exhaustion
+            resolution = self.get_video_resolution(input_path)
+            use_cuda_hwaccel = resolution is None or (resolution[0] < 3840)
+
+            if use_cuda_hwaccel:
+                cmd.extend(["-hwaccel", "cuda"])
+                # Só usar output format cuda se não tiver conversão HDR (que precisa filtros CPU)
+                if not hdr_to_sdr:
+                    cmd.extend(["-hwaccel_output_format", "cuda"])
+            else:
+                print(
+                    f"[FFmpegWrapper] 4K+ video detected ({resolution[0]}x{resolution[1]}), using CPU decoding to save VRAM"
+                )
+
+        cmd.extend(["-i", input_path])
+
+        video_params = self.CODEC_MAP.get(codec, self.CODEC_MAP["hevc_nvenc"])
+
         # Traduzir conversion_speed para preset se necessário
         if conversion_speed and hardware_category:
-            preset = self.get_preset_from_speed(conversion_speed, hardware_category, preset)
-        
+            preset = self.get_preset_from_speed(
+                conversion_speed, hardware_category, preset
+            )
+
         filter_complex = []
-        
+
         # [FIX] Determinar se usamos filtros CUDA ou CPU
         # Nota: Não usar filtros CUDA se HDR to SDR ativo (incompatível com filtros tonemap)
         # Usa cuda_available (que verifica se CUDA está disponível) em vez de cuda_accel
-        use_cuda_filters = (cuda_available and
-                           codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc'] and
-                           not hdr_to_sdr)
-        
+        use_cuda_filters = (
+            cuda_available
+            and codec in ["hevc_nvenc", "h264_nvenc", "av1_nvenc"]
+            and not hdr_to_sdr
+        )
+
         if deinterlace:
             # [FIX] Usar yadif_cuda quando CUDA ativo, bwdif caso contrário
             if use_cuda_filters:
-                filter_complex.append('yadif_cuda=mode=send_frame:parity=auto')
+                filter_complex.append("yadif_cuda=mode=send_frame:parity=auto")
             else:
-                filter_complex.append('bwdif=mode=send:par=1')
-        
+                filter_complex.append("bwdif=mode=send:par=1")
+
         if resolution:
             # [FIX] Usar scale_cuda quando CUDA ativo para manter processamento na GPU
             if use_cuda_filters:
-                filter_complex.append(f'scale_cuda=-2:{resolution}')
+                filter_complex.append(f"scale_cuda=-2:{resolution}")
             else:
-                filter_complex.append(f'scale=-2:{resolution}')
-        
+                filter_complex.append(f"scale=-2:{resolution}")
+
         if hdr_to_sdr:
-            filter_complex.append('zscale=t=linear:npl=100')
-            filter_complex.append('format=gbrpf32le')
-            filter_complex.append('tonemap=hable:desat=0')
-            filter_complex.append('zscale=t=bt709:m=bt709:r=tv')
-            filter_complex.append('format=yuv420p')
-        
+            filter_complex.append("zscale=t=linear:npl=100")
+            filter_complex.append("format=gbrpf32le")
+            filter_complex.append("tonemap=hable:desat=0")
+            filter_complex.append("zscale=t=bt709:m=bt709:r=tv")
+            filter_complex.append("format=yuv420p")
+
         if filter_complex:
-            cmd.extend(['-vf', ','.join(filter_complex)])
-        
-        cmd.extend(['-c:v', video_params['codec']])
-        
-        if codec in ['hevc_amf', 'h264_amf']:
-            preset_map = {'quality': 'quality', 'balanced': 'balanced', 'speed': 'speed'}
-            amf_preset = preset_map.get(preset, 'balanced')
-            cmd.extend(['-preset', amf_preset])
-        elif codec in ['hevc_qsv', 'h264_qsv']:
-            qsv_preset = preset if preset in ['fast', 'faster', 'fastest', 'slow', 'slower', 'slowest'] else 'balanced'
-            cmd.extend(['-preset', qsv_preset])
-        elif codec in ['libx265', 'libx264']:
-            cpu_preset = preset if preset in ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow'] else 'medium'
-            cmd.extend(['-preset', cpu_preset])
+            cmd.extend(["-vf", ",".join(filter_complex)])
+
+        cmd.extend(["-c:v", video_params["codec"]])
+
+        if codec in ["hevc_amf", "h264_amf"]:
+            preset_map = {
+                "quality": "quality",
+                "balanced": "balanced",
+                "speed": "speed",
+            }
+            amf_preset = preset_map.get(preset, "balanced")
+            cmd.extend(["-preset", amf_preset])
+        elif codec in ["hevc_qsv", "h264_qsv"]:
+            qsv_preset = (
+                preset
+                if preset in ["fast", "faster", "fastest", "slow", "slower", "slowest"]
+                else "balanced"
+            )
+            cmd.extend(["-preset", qsv_preset])
+        elif codec in ["libx265", "libx264"]:
+            cpu_preset = (
+                preset
+                if preset
+                in [
+                    "ultrafast",
+                    "superfast",
+                    "veryfast",
+                    "faster",
+                    "fast",
+                    "medium",
+                    "slow",
+                    "slower",
+                    "veryslow",
+                ]
+                else "medium"
+            )
+            cmd.extend(["-preset", cpu_preset])
         else:
-            cmd.extend(['-preset', preset])
-        
-        if two_pass and codec in ['h264_nvenc', 'hevc_nvenc']:
-            cmd.extend(['-rc', 'twopass'])
+            cmd.extend(["-preset", preset])
+
+        if two_pass and codec in ["h264_nvenc", "hevc_nvenc"]:
+            cmd.extend(["-rc", "twopass"])
         elif cq:
-            cq_param = video_params.get('cq_param', '-cq')
+            cq_param = video_params.get("cq_param", "-cq")
             # Garante que o valor CQ seja string para evitar erro no subprocess
             cmd.extend([cq_param, str(cq)])
         elif bitrate:
-            cmd.extend(['-b:v', bitrate])
-        
-        if codec not in ['libx265', 'libx264']:
+            cmd.extend(["-b:v", bitrate])
+
+        if codec not in ["libx265", "libx264"]:
             # [FIX APLICADO] Não especificar pix_fmt quando usando pipeline CUDA completo
             # Quando usamos hwaccel_output_format cuda + scale_cuda, os frames estão na GPU
             # Especificar -pix_fmt yuv420p10le (formato CPU) causava conflito
-            
+
             if use_cuda_filters:
                 # Pipeline CUDA completo: deixar o encoder NVENC escolher o formato automaticamente
                 # O encoder escolherá o formato CUDA nativo (p010le para 10-bit, nv12 para 8-bit)
@@ -358,63 +519,63 @@ class FFmpegWrapper:
                 pass
             else:
                 # Pipeline CPU ou híbrido: especificar pix_fmt explicitamente
-                cmd.extend(['-pix_fmt', video_params['pix_fmt']])
-            
+                cmd.extend(["-pix_fmt", video_params["pix_fmt"]])
+
             # Profile sempre necessário
-            cmd.extend(['-profile:v', video_params['profile']])
-        
+            cmd.extend(["-profile:v", video_params["profile"]])
+
         if plex_compatible:
             # Corrige tag para HEVC/H265 e AV1
-            if codec in ['hevc_nvenc', 'libx265', 'hevc_amf', 'hevc_qsv']:
-                cmd.extend(['-tag:v', 'hvc1'])
-            elif codec in ['av1_nvenc']:
-                cmd.extend(['-tag:v', 'av01'])
+            if codec in ["hevc_nvenc", "libx265", "hevc_amf", "hevc_qsv"]:
+                cmd.extend(["-tag:v", "hvc1"])
+            elif codec in ["av1_nvenc"]:
+                cmd.extend(["-tag:v", "av01"])
             else:
-                cmd.extend(['-tag:v', 'avc1'])
-        
+                cmd.extend(["-tag:v", "avc1"])
+
         audio_streams = self.get_audio_streams(self.get_media_info(input_path))
-        
+
         if audio_tracks:
             audio_map = []
             for track in audio_tracks:
                 if track <= len(audio_streams):
-                    audio_map.extend(['-map', f'0:a:{track-1}'])
+                    audio_map.extend(["-map", f"0:a:{track - 1}"])
             cmd.extend(audio_map)
-            cmd.extend(['-c:a', 'aac', '-b:a', '192k'])
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
         elif audio_streams:
-            cmd.extend(['-map', '0:a?', '-c:a', 'aac', '-b:a', '192k'])
-        
+            cmd.extend(["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"])
+
         # Copiar todas as legendas sem re-encoding para evitar erros com formatos incompatíveis (SSA/ASS)
         if subtitle_burn:
             # Se burn está habilitado, ainda assim copiar as legendas (não implementar burn por ora)
-            cmd.extend(['-map', '0:s?', '-c:s', 'copy'])
+            cmd.extend(["-map", "0:s?", "-c:s", "copy"])
         else:
             # Copiar todas as legendas como estão
-            cmd.extend(['-map', '0:s?', '-c:s', 'copy'])
-        
-        cmd.extend(['-map', '0:v:0'])
-        
-        cmd.extend(['-movflags', '+faststart'])
-        
+            cmd.extend(["-map", "0:s?", "-c:s", "copy"])
+
+        cmd.extend(["-map", "0:v:0"])
+
+        cmd.extend(["-movflags", "+faststart"])
+
         cmd.append(output_path)
-        
+
         return cmd
-    
+
     def run_encoding(
         self,
         command: List[str],
         timeout: Optional[int] = None,
-        callback: Optional[Callable[[str], None]] = None
+        callback: Optional[Callable[[str], None]] = None,
     ) -> tuple[bool, str]:
         """Executa comando de encoding."""
         try:
             import os
             import sys
-            
+
             # ✅ FIX: No Windows/WSL, define variável ambiente para forçar line buffering
             env = os.environ.copy()
-            env['PYTHONUNBUFFERED'] = '1'
-            
+            env["PYTHONUNBUFFERED"] = "1"
+
             self._process = subprocess.Popen(
                 command,
                 stdin=subprocess.DEVNULL,  # ✅ FIX: Fecha stdin completamente
@@ -423,29 +584,30 @@ class FFmpegWrapper:
                 text=False,  # ✅ FIX: Leitura em binário para ter mais controle
                 bufsize=0,  # ✅ FIX: Sem buffering
                 universal_newlines=False,
-                env=env
+                env=env,
             )
-            
+
             # ✅ FIX CRÍTICO: Tornar stdout não-bloqueante (Linux/WSL)
-            if sys.platform != 'win32' and self._process.stdout:
+            if sys.platform != "win32" and self._process.stdout:
                 import fcntl
                 import os as os_module
+
                 fd = self._process.stdout.fileno()
                 flags = fcntl.fcntl(fd, fcntl.F_GETFL)
                 fcntl.fcntl(fd, fcntl.F_SETFL, flags | os_module.O_NONBLOCK)
-            
+
             output_lines = []
             import time as time_module
-            
+
             start_time = time_module.time()
             last_output_time = start_time
             max_idle_seconds = 300  # 5 minutos sem saída = possível hang
-            
+
             # Loop principal de leitura da saída do FFmpeg
             loop_iteration = 0
             while True:
                 loop_iteration += 1
-                
+
                 # Verifica se o processo terminou
                 poll_result = self._process.poll()
                 if poll_result is not None:
@@ -454,14 +616,14 @@ class FFmpegWrapper:
                         remaining = self._process.stdout.read()
                         if remaining:
                             # ✅ FIX: Decodifica bytes para string antes de processar
-                            remaining_text = remaining.decode('utf-8', errors='ignore')
+                            remaining_text = remaining.decode("utf-8", errors="ignore")
                             for line in remaining_text.splitlines():
                                 if line.strip():
                                     output_lines.append(line.strip())
                                     if callback:
                                         callback(line.strip())
                     break
-                
+
                 # ✅ FIX: Leitura não-bloqueante com acúmulo de buffer
                 if self._process.stdout:
                     try:
@@ -470,22 +632,40 @@ class FFmpegWrapper:
                         if chunk:
                             last_output_time = time_module.time()
                             # Decodifica e processa linhas
-                            text = chunk.decode('utf-8', errors='ignore')
-                            
+                            text = chunk.decode("utf-8", errors="ignore")
+
                             # Split por \r e \n - FFmpeg usa ambos
-                            lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
-                            
+                            lines = (
+                                text.replace("\r\n", "\n")
+                                .replace("\r", "\n")
+                                .split("\n")
+                            )
+
                             for line in lines:
                                 line = line.strip()
                                 if line:
                                     output_lines.append(line)
                                     if callback:
                                         # 🔍 DEBUG: Log apenas se linha contém indicadores de progresso
-                                        if any(indicator in line.lower() for indicator in ['fps=', 'speed=', 'time=', 'frame=']):
-                                            if not hasattr(callback, 'progress_line_count'):
+                                        if any(
+                                            indicator in line.lower()
+                                            for indicator in [
+                                                "fps=",
+                                                "speed=",
+                                                "time=",
+                                                "frame=",
+                                            ]
+                                        ):
+                                            if not hasattr(
+                                                callback, "progress_line_count"
+                                            ):
                                                 callback.progress_line_count = 0
                                             callback.progress_line_count += 1
-                                            if callback.progress_line_count <= 5 or callback.progress_line_count % 15 == 0:
+                                            if (
+                                                callback.progress_line_count <= 5
+                                                or callback.progress_line_count % 15
+                                                == 0
+                                            ):
                                                 pass  # Debug log removido
                                         callback(line)
                         else:
@@ -496,7 +676,7 @@ class FFmpegWrapper:
                         time_module.sleep(0.1)
                     except Exception as e:
                         time_module.sleep(0.1)
-                
+
                 # Verifica timeout de inatividade (processo pode estar travado)
                 idle_time = time_module.time() - last_output_time
                 if idle_time > max_idle_seconds:
@@ -504,18 +684,20 @@ class FFmpegWrapper:
                     if self._process.poll() is not None:
                         break
                     # Se ainda rodando, continua aguardando (não quebra o loop)
-                    last_output_time = time_module.time()  # Reseta timer para evitar loop infinito de warnings
-            
+                    last_output_time = (
+                        time_module.time()
+                    )  # Reseta timer para evitar loop infinito de warnings
+
             # Aguarda processo terminar e obtém returncode
             returncode = self._process.wait(timeout=5)
             self._process = None
-            
+
             if returncode == 0:
-                return (True, 'Encoding completed successfully')
+                return (True, "Encoding completed successfully")
             else:
-                error_msg = '\n'.join(output_lines[-20:])
+                error_msg = "\n".join(output_lines[-20:])
                 return (False, error_msg)
-                
+
         except subprocess.TimeoutExpired:
             if self._process:
                 self._process.terminate()
@@ -524,7 +706,7 @@ class FFmpegWrapper:
                 except:
                     self._process.kill()
             self._process = None
-            return (False, 'Encoding timeout')
+            return (False, "Encoding timeout")
         except Exception as e:
             if self._process:
                 try:
@@ -533,7 +715,7 @@ class FFmpegWrapper:
                     pass
             self._process = None
             return (False, str(e))
-    
+
     def terminate(self):
         """Termina processo de encoding ativo."""
         with self._lock:
@@ -548,50 +730,52 @@ class FFmpegWrapper:
                         pass
                 finally:
                     self._process = None
-    
-    def get_preset_from_speed(self, conversion_speed: str, hardware_category: str, default_preset: str) -> str:
+
+    def get_preset_from_speed(
+        self, conversion_speed: str, hardware_category: str, default_preset: str
+    ) -> str:
         """Traduz velocidade de conversão para preset específico do hardware.
-        
+
         Args:
             conversion_speed: Velocidade (very_fast, fast, medium, slow)
             hardware_category: Categoria de hardware (nvidia_gpu, amd_gpu, intel_igpu, amd_igpu, cpu)
             default_preset: Preset padrão para fallback
-        
+
         Returns:
             Preset específico para o hardware
         """
         speed_to_preset = {
-            'nvidia_gpu': {
-                'very_fast': 'p2',
-                'fast': 'p3',
-                'medium': 'p5',
-                'slow': 'p6'
+            "nvidia_gpu": {
+                "very_fast": "p2",
+                "fast": "p3",
+                "medium": "p5",
+                "slow": "p6",
             },
-            'amd_gpu': {
-                'very_fast': 'speed',
-                'fast': 'speed',
-                'medium': 'balanced',
-                'slow': 'quality'
+            "amd_gpu": {
+                "very_fast": "speed",
+                "fast": "speed",
+                "medium": "balanced",
+                "slow": "quality",
             },
-            'intel_igpu': {
-                'very_fast': 'fastest',
-                'fast': 'faster',
-                'medium': 'balanced',
-                'slow': 'slow'
+            "intel_igpu": {
+                "very_fast": "fastest",
+                "fast": "faster",
+                "medium": "balanced",
+                "slow": "slow",
             },
-            'amd_igpu': {
-                'very_fast': 'speed',
-                'fast': 'speed',
-                'medium': 'balanced',
-                'slow': 'quality'
+            "amd_igpu": {
+                "very_fast": "speed",
+                "fast": "speed",
+                "medium": "balanced",
+                "slow": "quality",
             },
-            'cpu': {
-                'very_fast': 'veryfast',
-                'fast': 'fast',
-                'medium': 'medium',
-                'slow': 'slow'
-            }
+            "cpu": {
+                "very_fast": "veryfast",
+                "fast": "fast",
+                "medium": "medium",
+                "slow": "slow",
+            },
         }
-        
+
         hw_map = speed_to_preset.get(hardware_category, {})
         return hw_map.get(conversion_speed, default_preset)
