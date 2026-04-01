@@ -283,18 +283,21 @@ class FFmpegWrapper:
             cmd.extend(['-b:v', bitrate])
         
         if codec not in ['libx265', 'libx264']:
-            # 🔍 DIAGNÓSTICO CRÍTICO: Este é o ponto do problema!
+            # ✅ FIX APLICADO: Não especificar pix_fmt quando usando pipeline CUDA completo
             # Quando usamos hwaccel_output_format cuda + scale_cuda, os frames estão na GPU
-            # Especificar -pix_fmt yuv420p10le (formato CPU) causa conflito
-            print(f"🔍 DIAGNÓSTICO CRÍTICO: Tentando adicionar -pix_fmt {video_params['pix_fmt']}")
-            print(f"🔍 DIAGNÓSTICO: use_cuda_filters={use_cuda_filters}, codec={codec}")
+            # Especificar -pix_fmt yuv420p10le (formato CPU) causava conflito
             
-            # ⚠️ PROBLEMA IDENTIFICADO: Não podemos usar pix_fmt CPU com pipeline CUDA completo
             if use_cuda_filters:
-                print(f"⚠️ DIAGNÓSTICO: CONFLITO DETECTADO! Pipeline CUDA não aceita pix_fmt CPU")
-                print(f"⚠️ DIAGNÓSTICO: scale_cuda gera frames em CUDA, mas pix_fmt força conversão para CPU")
+                # Pipeline CUDA completo: deixar o encoder NVENC escolher o formato automaticamente
+                # O encoder escolherá o formato CUDA nativo (p010le para 10-bit, nv12 para 8-bit)
+                print(f"✅ FIX: Pipeline CUDA completo - removendo -pix_fmt para evitar conversão CPU")
+                print(f"✅ FIX: Encoder {codec} escolherá formato CUDA nativo automaticamente")
+            else:
+                # Pipeline CPU ou híbrido: especificar pix_fmt explicitamente
+                print(f"🔍 DEBUG: Pipeline CPU/híbrido - usando -pix_fmt {video_params['pix_fmt']}")
+                cmd.extend(['-pix_fmt', video_params['pix_fmt']])
             
-            cmd.extend(['-pix_fmt', video_params['pix_fmt']])
+            # Profile sempre necessário
             cmd.extend(['-profile:v', video_params['profile']])
         
         if plex_compatible:
