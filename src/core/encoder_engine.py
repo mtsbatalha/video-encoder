@@ -185,6 +185,14 @@ class EncoderEngine:
             self._executor_thread.join(timeout=5)
             self._executor_thread = None
     
+    def toggle_debug(self) -> bool:
+        """Alterna estado do debug e retorna novo estado."""
+        return self.realtime_monitor.toggle_debug()
+    
+    def is_debug_enabled(self) -> bool:
+        """Retorna estado atual do debug."""
+        return self.realtime_monitor.is_debug_enabled()
+    
     def _executor_loop(self):
         """Loop principal do executor."""
         print(f"🔍 DEBUG: Executor loop iniciado")
@@ -293,10 +301,12 @@ class EncoderEngine:
             profile=profile
         )
         
-        parser = FFmpegProgressParser()
+        parser = FFmpegProgressParser(monitor=self.realtime_monitor)
         parser.set_duration(duration)
         
-        print(f"🔍 DEBUG: Construindo comando FFmpeg...")
+        self.realtime_monitor.add_debug_log("Iniciando encoding")
+        self.realtime_monitor.add_debug_log(f"Input: {job.input_path}")
+        self.realtime_monitor.add_debug_log(f"Output: {job.output_path}")
         command = self.ffmpeg.build_encoding_command(
             input_path=job.input_path,
             output_path=job.output_path,
@@ -312,30 +322,18 @@ class EncoderEngine:
             subtitle_burn=profile.get('subtitle_burn', False),
             plex_compatible=profile.get('plex_compatible', True)
         )
-        print(f"🔍 DEBUG: Comando FFmpeg: {' '.join(command)}")
+        self.realtime_monitor.add_debug_log(f"Comando FFmpeg iniciado")
         
         def progress_callback(output: str):
-            # 🔍 DEBUG: Log apenas primeiras 10 linhas para não poluir demais
-            if not hasattr(progress_callback, 'line_count'):
-                progress_callback.line_count = 0
-            
-            progress_callback.line_count += 1
-            if progress_callback.line_count <= 10 or progress_callback.line_count % 20 == 0:
-                print(f"🔍 CALLBACK #{progress_callback.line_count}: Recebeu linha: {repr(output[:100])}")
-            
             stats = parser.parse_line(output)
             
             if 'fps' in stats:
-                print(f"📈 CALLBACK: Atualizando monitor com FPS={stats['fps']}")
                 self.realtime_monitor.update_encoding_stats(fps=stats['fps'])
             if 'speed' in stats:
-                print(f"📈 CALLBACK: Atualizando monitor com Speed={stats['speed']}x")
                 self.realtime_monitor.update_encoding_stats(speed=stats['speed'])
             if 'bitrate' in stats:
-                print(f"📈 CALLBACK: Atualizando monitor com Bitrate={stats['bitrate']} Kbps")
                 self.realtime_monitor.update_encoding_stats(bitrate=stats['bitrate'])
             if 'current_time' in stats:
-                print(f"📈 CALLBACK: Atualizando progresso={stats.get('progress', 0):.1f}%, time={stats['current_time']:.1f}s")
                 self.realtime_monitor.update_progress(
                     progress=stats.get('progress', 0),
                     current_time=stats['current_time']
@@ -359,10 +357,13 @@ class EncoderEngine:
                 for callback in self._encoding_stats_callbacks:
                     callback(job.id, stats)
         
-        print(f"🔍 DEBUG: Executando comando FFmpeg...")
+        self.realtime_monitor.add_debug_log("Executando encoding...")
         success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
         
-        print(f"🔍 DEBUG: Encoding finalizado - Success: {success}, Error: {error}")
+        if success:
+            self.realtime_monitor.add_debug_log("Encoding completado com sucesso")
+        else:
+            self.realtime_monitor.add_debug_log(f"Erro no encoding: {error}")
         
         # Antes de parar o monitor, garantir que o progresso está completo
         if success:

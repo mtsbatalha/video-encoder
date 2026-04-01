@@ -24,8 +24,54 @@ from .ui.queue_menu import show_queue_submenu
 from .ui.recurrent_folder_ui import RecurrentFolderUI
 from .managers.recurrent_history_manager import RecurrentHistoryManager
 
-
 console = Console()
+
+
+def check_debug_key(encoder: EncoderEngine):
+    """Verifica se a tecla 'D' foi pressionada para toggle de debug.
+    
+    Args:
+        encoder: Instância do EncoderEngine para toggle de debug.
+    
+    Returns:
+        True se tecla foi processada, False caso contrário.
+    """
+    try:
+        import sys
+        import msvcrt  # Windows
+        
+        if msvcrt.kbhit():
+            char = msvcrt.getwch()
+            if char.lower() == 'd':
+                debug_enabled = encoder.toggle_debug()
+                status = "ativado" if debug_enabled else "desativado"
+                console.print(f"\n[cyan]Debug {status}![/cyan]")
+                return True
+    except ImportError:
+        # Linux/Mac - requer configuração especial de terminal
+        try:
+            import tty
+            import termios
+            import select
+            
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                if select.select([sys.stdin], [], [], 0)[0]:
+                    char = sys.stdin.read(1)
+                    if char.lower() == 'd':
+                        debug_enabled = encoder.toggle_debug()
+                        status = "ativado" if debug_enabled else "desativado"
+                        console.print(f"\n[cyan]Debug {status}![/cyan]")
+                        return True
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except Exception:
+            pass
+    
+    return False
+
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -480,6 +526,9 @@ def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: Que
                 console.print(f"[dim]DEBUG: Todas as condições para parar foram atendidas - encerrando loop[/dim]")
                 break
 
+            # Verifica se tecla 'D' foi pressionada para toggle de debug
+            check_debug_key(encoder)
+            
             time.sleep(1)
     except KeyboardInterrupt:
         console.print("\n[yellow]Parando processamento...[/yellow]")

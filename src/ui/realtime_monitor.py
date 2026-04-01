@@ -74,6 +74,11 @@ class RealTimeEncodingMonitor:
         self._input_media_info: Dict[str, Any] = {}
         self._output_media_info: Dict[str, Any] = {}
         self._transcode_status: Dict[str, str] = {}  # 'video', 'audio', 'subtitle'
+        
+        # Controle de debug
+        self._debug_enabled: bool = False
+        self._debug_logs: List[str] = []
+        self._max_debug_logs: int = 50  # Máximo de logs para manter na tela
     
     def start(self, description: str = "Encoding", total_duration: float = 0,
               input_file: str = "", output_file: str = "",
@@ -169,6 +174,35 @@ class RealTimeEncodingMonitor:
         """Atualiza status."""
         with self._lock:
             self._status = status
+    
+    def toggle_debug(self) -> bool:
+        """Alterna estado do debug e retorna novo estado."""
+        with self._lock:
+            self._debug_enabled = not self._debug_enabled
+            if self._debug_enabled:
+                self._add_debug_log("Debug ativado")
+            else:
+                self._add_debug_log("Debug desativado")
+            return self._debug_enabled
+    
+    def is_debug_enabled(self) -> bool:
+        """Retorna estado atual do debug."""
+        return self._debug_enabled
+    
+    def _add_debug_log(self, message: str):
+        """Adiciona log de debug."""
+        with self._lock:
+            timestamp = time.strftime('%H:%M:%S')
+            log_entry = f"[{timestamp}] {message}"
+            self._debug_logs.append(log_entry)
+            # Mantém apenas os últimos logs
+            if len(self._debug_logs) > self._max_debug_logs:
+                self._debug_logs = self._debug_logs[-self._max_debug_logs:]
+    
+    def add_debug_log(self, message: str):
+        """Método público para adicionar log de debug."""
+        if self._debug_enabled:
+            self._add_debug_log(message)
     
     def _process_input_media_info(self, media_info: Dict[str, Any]) -> Dict[str, Any]:
         """Processa informações de mídia de entrada."""
@@ -589,6 +623,18 @@ class RealTimeEncodingMonitor:
                 Text(""),
             ]
             renderables.extend(files_parts)
+            
+            # Dica sobre debug
+            renderables.append(Text(""))
+            renderables.append(Text.from_markup("[dim]Pressione 'D' para ativar/desativar debug[/dim]"))
+            
+            # Adiciona seção de debug logs abaixo do monitoramento
+            if self._debug_enabled and self._debug_logs:
+                renderables.append(Text(""))
+                renderables.append(Text.from_markup("[bold yellow]🐞 Debug Logs:[/bold yellow]"))
+                renderables.append(Text(""))
+                for log in self._debug_logs[-15:]:  # Exibe últimos 15 logs
+                    renderables.append(Text.from_markup(f"[dim]{log}[/dim]"))
 
             return Panel(
                 Group(*renderables),
@@ -606,7 +652,7 @@ class RealTimeEncodingMonitor:
 class FFmpegProgressParser:
     """Parser para extrair estatísticas do output do FFmpeg."""
     
-    def __init__(self):
+    def __init__(self, monitor: Optional[RealTimeEncodingMonitor] = None):
         self._fps_pattern = re.compile(r'fps=(\d+\.?\d*)')
         self._speed_pattern = re.compile(r'speed=(\d+\.?\d*)x')
         self._bitrate_pattern = re.compile(r'bitrate=(\d+\.?\d*)kbits/s')
@@ -616,6 +662,12 @@ class FFmpegProgressParser:
         
         self._total_frames = 0
         self._duration_seconds = 0
+        self._monitor = monitor
+    
+    def _debug(self, message: str):
+        """Envia mensagem para o sistema de debug se monitor estiver disponível."""
+        if self._monitor:
+            self._monitor.add_debug_log(message)
     
     def set_duration(self, duration_seconds: float):
         """Define duração total do vídeo."""
@@ -627,31 +679,31 @@ class FFmpegProgressParser:
         
         # 🔍 DEBUG: Log da linha completa recebida (apenas se contiver indicadores de progresso)
         if any(indicator in line.lower() for indicator in ['fps=', 'speed=', 'time=', 'frame=']):
-            print(f"🔍 PARSER DEBUG: Linha FFmpeg detectada: {repr(line[:150])}")  # Primeiros 150 chars
+            self._debug(f"Linha FFmpeg detectada: {line[:100]}...")
         
         fps_match = self._fps_pattern.search(line)
         if fps_match:
             fps_value = float(fps_match.group(1))
             stats['fps'] = fps_value
-            print(f"✅ PARSER: FPS extraído = {fps_value}")
+            self._debug(f"FPS extraído = {fps_value}")
         elif 'fps=' in line.lower():
-            print(f"⚠️ PARSER: 'fps=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
+            self._debug(f"'fps=' encontrado mas regex NÃO fez match")
         
         speed_match = self._speed_pattern.search(line)
         if speed_match:
             speed_value = float(speed_match.group(1))
             stats['speed'] = speed_value
-            print(f"✅ PARSER: Speed extraído = {speed_value}x")
+            self._debug(f"Speed extraído = {speed_value}x")
         elif 'speed=' in line.lower():
-            print(f"⚠️ PARSER: 'speed=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
+            self._debug(f"'speed=' encontrado mas regex NÃO fez match")
         
         bitrate_match = self._bitrate_pattern.search(line)
         if bitrate_match:
             bitrate_value = float(bitrate_match.group(1))
             stats['bitrate'] = bitrate_value
-            print(f"✅ PARSER: Bitrate extraído = {bitrate_value} Kbps")
+            self._debug(f"Bitrate extraído = {bitrate_value} Kbps")
         elif 'bitrate=' in line.lower():
-            print(f"⚠️ PARSER: 'bitrate=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
+            self._debug(f"'bitrate=' encontrado mas regex NÃO fez match")
         
         time_match = self._time_pattern.search(line)
         if time_match:
@@ -665,16 +717,16 @@ class FFmpegProgressParser:
             if self._duration_seconds > 0:
                 progress_pct = (current_seconds / self._duration_seconds) * 100
                 stats['progress'] = progress_pct
-                print(f"✅ PARSER: Progresso = {progress_pct:.1f}% (tempo: {current_seconds:.1f}s / {self._duration_seconds:.1f}s)")
+                self._debug(f"Progresso = {progress_pct:.1f}% ({current_seconds:.1f}s / {self._duration_seconds:.1f}s)")
         elif 'time=' in line.lower():
-            print(f"⚠️ PARSER: 'time=' encontrado mas regex NÃO fez match. Linha: {repr(line[:150])}")
+            self._debug(f"'time=' encontrado mas regex NÃO fez match")
         
         frame_match = self._frame_pattern.search(line)
         if frame_match:
             stats['frame'] = int(frame_match.group(1))
         
         if stats:
-            print(f"📊 PARSER: Stats completos extraídos: {stats}")
+            self._debug(f"Stats: FPS={stats.get('fps', 0):.1f}, Speed={stats.get('speed', 0):.2f}x")
         
         return stats
     

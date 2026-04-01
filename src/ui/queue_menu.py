@@ -1,5 +1,6 @@
 """UI para gerenciamento de fila de jobs."""
 
+import sys
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -9,6 +10,40 @@ from pathlib import Path
 from ..managers.queue_manager import QueueManager, QueuePriority
 from ..managers.job_manager import JobManager, JobStatus
 from .menu import Menu
+
+
+def check_debug_key(encoder):
+    """Verifica se a tecla 'D' foi pressionada para toggle de debug."""
+    try:
+        import msvcrt  # Windows
+        
+        if msvcrt.kbhit():
+            char = msvcrt.getwch()
+            if char.lower() == 'd':
+                debug_enabled = encoder.toggle_debug()
+                return True
+    except ImportError:
+        # Linux/Mac
+        try:
+            import tty
+            import termios
+            import select
+            
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                if select.select([sys.stdin], [], [], 0)[0]:
+                    char = sys.stdin.read(1)
+                    if char.lower() == 'd':
+                        encoder.toggle_debug()
+                        return True
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except Exception:
+            pass
+    
+    return False
 
 
 class QueueMenuUI:
@@ -447,6 +482,9 @@ class QueueMenuUI:
                 if not running_count and not pending_in_encoder and queue_empty:
                     self.console.print("\n[green]Todos os jobs foram processados![/green]")
                     break
+
+                # Verifica se tecla 'D' foi pressionada para toggle de debug
+                check_debug_key(encoder)
 
                 time.sleep(1)
         except KeyboardInterrupt:
