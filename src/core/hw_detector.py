@@ -170,7 +170,7 @@ class HardwareDetector:
                 return 0.0
     
     def _detect_nvidia_gpu(self) -> List[Dict[str, Any]]:
-        """Detecta GPUs NVIDIA usando pynvml."""
+        """Detecta GPUs NVIDIA usando pynvml ou métodos alternativos."""
         gpus = []
         
         try:
@@ -201,12 +201,43 @@ class HardwareDetector:
             except pynvml.NVMLError:
                 pass
         except ImportError:
-            if self._check_codec_available('hevc_nvenc'):
-                gpus.append({
-                    "name": "NVIDIA GPU (detectada via FFmpeg)",
-                    "memory_gb": 0,
-                    "nvenc_supported": True
-                })
+            # pynvml não instalado - tenta métodos alternativos
+            try:
+                import subprocess
+                # Tenta obter informações via nvidia-smi
+                result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
+                                      capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and result.stdout.strip():
+                    lines = result.stdout.strip().split('\n')
+                    for i, line in enumerate(lines):
+                        parts = line.split(', ')
+                        if len(parts) >= 2:
+                            name = parts[0].strip()
+                            memory_gb = float(parts[1].strip())
+                            nvenc_supported = self._check_codec_available('hevc_nvenc')
+                            
+                            gpus.append({
+                                "index": i,
+                                "name": name,
+                                "memory_gb": memory_gb,
+                                "nvenc_supported": nvenc_supported
+                            })
+            except FileNotFoundError:
+                # nvidia-smi não encontrado, tenta verificar se temos codecs NVENC disponíveis
+                if self._check_codec_available('hevc_nvenc'):
+                    gpus.append({
+                        "name": "NVIDIA GPU (detectada via FFmpeg)",
+                        "memory_gb": 0,
+                        "nvenc_supported": True
+                    })
+            except Exception:
+                # Se tudo falhar mas codec estiver disponível, registra GPU genérica
+                if self._check_codec_available('hevc_nvenc'):
+                    gpus.append({
+                        "name": "NVIDIA GPU (detectada via FFmpeg)",
+                        "memory_gb": 0,
+                        "nvenc_supported": True
+                    })
         
         return gpus
     

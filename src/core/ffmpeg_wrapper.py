@@ -126,8 +126,39 @@ class FFmpegWrapper:
                     pass
                 return False
         except ImportError:
-            # pynvml não instalado - não podemos confirmar CUDA disponível
-            # Retorna False para evitar erros de decodificação
+            # pynvml não instalado - tenta verificação alternativa via FFmpeg
+            # Verifica se o dispositivo CUDA está disponível via nvidia-smi ou testes FFmpeg
+            try:
+                import subprocess
+                # Tenta executar um comando simples para verificar se CUDA está disponível
+                result = subprocess.run(['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
+                                      capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and result.stdout.strip():
+                    # Se nvidia-smi funciona e retorna resultados, provavelmente temos CUDA
+                    return True
+            except FileNotFoundError:
+                # nvidia-smi não encontrado, tenta outro método
+                pass
+            except Exception:
+                pass
+            
+            # Se nvidia-smi não estiver disponível, tenta um teste prático com FFmpeg
+            try:
+                # Testa se conseguimos usar aceleração CUDA com FFmpeg
+                result = subprocess.run([self.ffmpeg, '-hwaccels'],
+                                      capture_output=True, text=True, timeout=10)
+                if 'cuda' in result.stdout.lower():
+                    # Verifica se temos dispositivos CUDA disponíveis
+                    result_caps = subprocess.run([self.ffmpeg, '-f', 'lavfi', '-i', 'nullsrc=size=1920x1080',
+                                                '-c:v', 'h264_nvenc', '-frames:v', '1', '-f', 'null', '-', '-v', 'verbose'],
+                                               capture_output=True, text=True, timeout=15)
+                    # Se não houver erro de "No CUDA capable devices found", CUDA deve estar disponível
+                    if 'No CUDA capable devices found' not in result_caps.stderr:
+                        return True
+            except Exception:
+                pass
+            
+            # Se tudo falhar, retorna False
             return False
         except Exception:
             return False
