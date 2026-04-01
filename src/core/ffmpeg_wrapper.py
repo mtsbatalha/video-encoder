@@ -196,6 +196,10 @@ class FFmpegWrapper:
         # ✅ CUDA ACCEL: Adiciona flags de aceleração hardware para codecs NVIDIA
         cmd = [self.ffmpeg, '-y', '-stats']
         
+        # 🔍 DIAGNÓSTICO: Log de configuração inicial
+        print(f"🔍 DIAGNÓSTICO: codec={codec}, cuda_accel={cuda_accel}, hdr_to_sdr={hdr_to_sdr}")
+        print(f"🔍 DIAGNÓSTICO: resolution={resolution}, deinterlace={deinterlace}")
+        
         # ✅ FIX: Adicionar aceleração CUDA para codecs NVIDIA
         # Nota: Não usar -hwaccel_output_format cuda se HDR to SDR ativo (filtros incompatíveis)
         if cuda_accel and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
@@ -203,6 +207,9 @@ class FFmpegWrapper:
             # Só usar output format cuda se não tiver conversão HDR (que precisa filtros CPU)
             if not hdr_to_sdr:
                 cmd.extend(['-hwaccel_output_format', 'cuda'])
+                print(f"🔍 DIAGNÓSTICO: Usando pipeline CUDA COMPLETO (hwaccel_output_format cuda)")
+            else:
+                print(f"🔍 DIAGNÓSTICO: Usando apenas hwaccel cuda (sem output format)")
         
         cmd.extend(['-i', input_path])
         
@@ -220,19 +227,25 @@ class FFmpegWrapper:
                            codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc'] and
                            not hdr_to_sdr)
         
+        print(f"🔍 DIAGNÓSTICO: use_cuda_filters={use_cuda_filters}")
+        
         if deinterlace:
             # ✅ FIX: Usar yadif_cuda quando CUDA ativo, bwdif caso contrário
             if use_cuda_filters:
                 filter_complex.append('yadif_cuda=mode=send_frame:parity=auto')
+                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CUDA: yadif_cuda")
             else:
                 filter_complex.append('bwdif=mode=send:par=1')
+                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CPU: bwdif")
         
         if resolution:
             # ✅ FIX: Usar scale_cuda quando CUDA ativo para manter processamento na GPU
             if use_cuda_filters:
                 filter_complex.append(f'scale_cuda=-2:{resolution}')
+                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CUDA: scale_cuda=-2:{resolution}")
             else:
                 filter_complex.append(f'scale=-2:{resolution}')
+                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CPU: scale=-2:{resolution}")
         
         if hdr_to_sdr:
             filter_complex.append('zscale=t=linear:npl=100')
@@ -240,9 +253,11 @@ class FFmpegWrapper:
             filter_complex.append('tonemap=hable:desat=0')
             filter_complex.append('zscale=t=bt709:m=bt709:r=tv')
             filter_complex.append('format=yuv420p')
+            print(f"🔍 DIAGNÓSTICO: Adicionado pipeline HDR to SDR")
         
         if filter_complex:
             cmd.extend(['-vf', ','.join(filter_complex)])
+            print(f"🔍 DIAGNÓSTICO: Filtros finais: {','.join(filter_complex)}")
         
         cmd.extend(['-c:v', video_params['codec']])
         
@@ -268,6 +283,17 @@ class FFmpegWrapper:
             cmd.extend(['-b:v', bitrate])
         
         if codec not in ['libx265', 'libx264']:
+            # 🔍 DIAGNÓSTICO CRÍTICO: Este é o ponto do problema!
+            # Quando usamos hwaccel_output_format cuda + scale_cuda, os frames estão na GPU
+            # Especificar -pix_fmt yuv420p10le (formato CPU) causa conflito
+            print(f"🔍 DIAGNÓSTICO CRÍTICO: Tentando adicionar -pix_fmt {video_params['pix_fmt']}")
+            print(f"🔍 DIAGNÓSTICO: use_cuda_filters={use_cuda_filters}, codec={codec}")
+            
+            # ⚠️ PROBLEMA IDENTIFICADO: Não podemos usar pix_fmt CPU com pipeline CUDA completo
+            if use_cuda_filters:
+                print(f"⚠️ DIAGNÓSTICO: CONFLITO DETECTADO! Pipeline CUDA não aceita pix_fmt CPU")
+                print(f"⚠️ DIAGNÓSTICO: scale_cuda gera frames em CUDA, mas pix_fmt força conversão para CPU")
+            
             cmd.extend(['-pix_fmt', video_params['pix_fmt']])
             cmd.extend(['-profile:v', video_params['profile']])
         
@@ -299,6 +325,10 @@ class FFmpegWrapper:
         cmd.extend(['-movflags', '+faststart'])
         
         cmd.append(output_path)
+        
+        # 🔍 DIAGNÓSTICO: Log do comando completo
+        print(f"🔍 DIAGNÓSTICO: Comando FFmpeg completo construído:")
+        print(f"🔍 DIAGNÓSTICO: {' '.join(cmd)}")
         
         return cmd
     
