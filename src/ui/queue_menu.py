@@ -1,4 +1,7 @@
-"""UI para gerenciamento de fila de jobs."""
+"""UI para gerenciamento de fila de jobs.
+
+Esta versão foi atualizada para usar o UnifiedQueueManager.
+"""
 
 import sys
 from rich.console import Console
@@ -8,12 +11,21 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 try:
+    # Tentar usar o novo UnifiedQueueManager
+    from ..managers.unified_queue_manager import (
+        UnifiedQueueManager,
+        JobStatus,
+        QueuePriority,
+        QueueJob
+    )
+    # Criar aliases para compatibilidade
+    QueueManager = UnifiedQueueManager
+    JobManager = UnifiedQueueManager
+except ImportError:
+    # Fallback para o antigo sistema
     from ..managers.queue_manager import QueueManager, QueuePriority
     from ..managers.job_manager import JobManager, JobStatus
-except ImportError:
-    # Para testes diretos
-    from managers.queue_manager import QueueManager, QueuePriority
-    from managers.job_manager import JobManager, JobStatus
+
 from .menu import Menu
 
 
@@ -944,8 +956,25 @@ class QueueMenuUI:
 
 
 def show_queue_submenu(menu: Menu, queue_mgr: QueueManager, job_mgr: JobManager):
-    """Função helper para exibir submenu de fila."""
+    """Função helper para exibir submenu de fila.
+    
+    Esta função foi atualizada para usar a nova UI v2 com UnifiedQueueManager.
+    """
     console = Console()
-    console.print("[yellow][DEBUG show_queue_submenu] Função chamada![/yellow]")
+    
+    # Verificar se estamos usando o UnifiedQueueManager
+    try:
+        from ..managers.unified_queue_manager import UnifiedQueueManager
+        if isinstance(queue_mgr, UnifiedQueueManager):
+            # Usar nova UI v2
+            from .queue_menu_v2 import QueueMenuUIV2
+            ui = QueueMenuUIV2(console, queue_mgr)
+            ui.show_submenu()
+            return
+    except (ImportError, TypeError):
+        pass
+    
+    # Fallback para UI antiga
+    console.print("[yellow][AVISO] Usando UI antiga de fila. Considere migrar para UnifiedQueueManager.[/yellow]")
     ui = QueueMenuUI(console, queue_mgr, job_mgr)
     ui.show_submenu()

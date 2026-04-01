@@ -12,6 +12,7 @@ from .managers.profile_manager import ProfileManager
 from .managers.job_manager import JobManager, JobStatus
 from .managers.stats_manager import StatsManager
 from .managers.queue_manager import QueueManager
+from .managers.unified_queue_manager import UnifiedQueueManager
 from .core.ffmpeg_wrapper import FFmpegWrapper
 from .core.hw_monitor import HardwareMonitor
 from .core.hw_detector import HardwareDetector
@@ -1509,8 +1510,13 @@ def main():
     
     config = ConfigManager(args.config) if args.config else ConfigManager()
     profile_mgr = ProfileManager()
+    
+    # Usar o novo UnifiedQueueManager em vez de QueueManager e JobManager separados
+    unified_queue_mgr = UnifiedQueueManager()
+    
+    # Manter referências antigas para compatibilidade
     job_mgr = JobManager()
-    queue_mgr = QueueManager()
+    queue_mgr = unified_queue_mgr  # Usar UnifiedQueueManager como QueueManager
     stats_mgr = StatsManager()
     menu = Menu(console)
     
