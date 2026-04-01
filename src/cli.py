@@ -398,7 +398,7 @@ def run_watch_mode(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: 
     
     console.print("\n[yellow]Pressione Ctrl+C para parar[/yellow]")
     
-    encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 2))
+    encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 2), queue_manager=queue_mgr)
     
     def on_progress(job_id: str, progress: float):
         job_mgr.update_progress(job_id, progress)
@@ -452,7 +452,7 @@ def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: Que
     console.print(f"\n[bold]Processando {queue_mgr.get_queue_length()} job(s) da fila...[/bold]\n")
 
     from .core.encoder_engine import EncodingJob
-    encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 2))
+    encoder = EncoderEngine(max_concurrent=config.get('encoding.max_concurrent', 2), queue_manager=queue_mgr)
 
     def on_progress(job_id: str, progress: float):
         job_mgr.update_progress(job_id, progress)

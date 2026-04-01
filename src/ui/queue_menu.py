@@ -569,7 +569,7 @@ class QueueMenuUI:
         self.menu.clear()
         self.console.print("[bold cyan]Iniciando processamento da fila com monitor em tempo real...[/bold cyan]\n")
         
-        encoder = EncoderEngine(max_concurrent=1)
+        encoder = EncoderEngine(max_concurrent=1, queue_manager=self.queue_mgr)
         hw_monitor = HardwareMonitor()
         
         def on_progress(job_id: str, progress: float):
@@ -895,7 +895,7 @@ class QueueMenuUI:
         
         if self.menu.ask_confirm("Deseja monitorar o progresso destes jobs?", default=True):
             self.console.print(f"[yellow][DEBUG _show_live_monitor] Usuário confirmou monitoramento[/yellow]")
-            encoder = EncoderEngine(max_concurrent=1)
+            encoder = EncoderEngine(max_concurrent=1, queue_manager=self.queue_mgr)
             hw_monitor = HardwareMonitor()
             
             def on_progress(job_id: str, progress: float):

@@ -515,6 +515,22 @@ class UnifiedQueueManager:
             if job_id in self._queue_order:
                 self._queue_order.remove(job_id)
             
+            # Terminar processo FFMPEG associado, se existir
+            if job.ffmpeg_pid:
+                try:
+                    import psutil
+                    process = psutil.Process(job.ffmpeg_pid)
+                    process.terminate()  # Tenta terminar graciosamente primeiro
+                    try:
+                        process.wait(timeout=5)  # Espera até 5 segundos para terminar
+                    except psutil.TimeoutExpired:
+                        process.kill()  # Força matar se não terminar a tempo
+                except psutil.NoSuchProcess:
+                    # Processo já terminou
+                    pass
+                except Exception as e:
+                    print(f"Erro ao terminar processo FFMPEG {job.ffmpeg_pid}: {e}")
+            
             # Salvar
             self.save()
             
@@ -679,6 +695,13 @@ class UnifiedQueueManager:
             else:
                 # Limpar tudo
                 count = len(self._jobs)
+                
+                # Cancelar todos os jobs ativos primeiro para garantir que os processos FFMPEG sejam terminados
+                active_job_ids = list(self._active_jobs)
+                for job_id in active_job_ids:
+                    self.cancel_job(job_id)
+                
+                # Limpar todos os jobs
                 self._jobs.clear()
                 self._queue_order.clear()
                 self._active_jobs.clear()

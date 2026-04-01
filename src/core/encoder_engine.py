@@ -42,12 +42,14 @@ class EncoderEngine:
         ffmpeg_wrapper: Optional[FFmpegWrapper] = None,
         hw_monitor: Optional[HardwareMonitor] = None,
         realtime_monitor: Optional[RealTimeEncodingMonitor] = None,
-        max_concurrent: int = 2
+        max_concurrent: int = 2,
+        queue_manager: Optional[Any] = None
     ):
         self.ffmpeg = ffmpeg_wrapper or FFmpegWrapper()
         self.hw_monitor = hw_monitor or HardwareMonitor()
         self.realtime_monitor = realtime_monitor or RealTimeEncodingMonitor()
         self.max_concurrent = max_concurrent
+        self._queue_manager = queue_manager  # Armazena referência ao queue manager
         
         self._jobs: Dict[str, EncodingJob] = {}
         self._active_jobs: Dict[str, EncodingJob] = {}
@@ -351,8 +353,24 @@ class EncoderEngine:
                 for callback in self._encoding_stats_callbacks:
                     callback(job.id, stats)
         
-        self.realtime_monitor.add_debug_log("Executando encoding...")
-        success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
+            # Atualizar o PID do FFMPEG no job correspondente no UnifiedQueueManager
+            if hasattr(self.ffmpeg, '_process') and self.ffmpeg._process:
+                ffmpeg_pid = self.ffmpeg._process.pid
+                # Procurar o job correspondente no UnifiedQueueManager e atualizar o PID
+                try:
+                    # Tenta obter o UnifiedQueueManager se estiver disponível
+                    if hasattr(self, '_queue_manager'):
+                        queue_job = self._queue_manager.get_job(job.id)
+                        if queue_job and hasattr(queue_job, 'ffmpeg_pid'):
+                            queue_job.ffmpeg_pid = ffmpeg_pid
+                            # Salvar as alterações
+                            self._queue_manager.save()
+                except:
+                    # Se não for possível atualizar o PID no queue manager, registrar aviso
+                    print(f"Aviso: Não foi possível atualizar o PID do FFMPEG no job {job.id}")
+            
+            self.realtime_monitor.add_debug_log("Executando encoding...")
+            success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
         
         if success:
             self.realtime_monitor.add_debug_log("Encoding completado com sucesso")

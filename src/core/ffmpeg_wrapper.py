@@ -192,24 +192,24 @@ class FFmpegWrapper:
             cuda_accel: Habilitar aceleração CUDA para codecs NVIDIA (default: True)
         """
         
-        # ✅ FIX: Usa stderr padrão com -stats para output de progresso
-        # ✅ CUDA ACCEL: Adiciona flags de aceleração hardware para codecs NVIDIA
+        # [FIX] Usa stderr padrão com -stats para output de progresso
+        # [CUDA ACCEL] Adiciona flags de aceleração hardware para codecs NVIDIA
         cmd = [self.ffmpeg, '-y', '-stats']
         
-        # 🔍 DIAGNÓSTICO: Log de configuração inicial
-        print(f"🔍 DIAGNÓSTICO: codec={codec}, cuda_accel={cuda_accel}, hdr_to_sdr={hdr_to_sdr}")
-        print(f"🔍 DIAGNÓSTICO: resolution={resolution}, deinterlace={deinterlace}")
+        # [DEBUG] Log de configuração inicial
+        print(f"[DEBUG] codec={codec}, cuda_accel={cuda_accel}, hdr_to_sdr={hdr_to_sdr}")
+        print(f"[DEBUG] resolution={resolution}, deinterlace={deinterlace}")
         
-        # ✅ FIX: Adicionar aceleração CUDA para codecs NVIDIA
+        # [FIX] Adicionar aceleração CUDA para codecs NVIDIA
         # Nota: Não usar -hwaccel_output_format cuda se HDR to SDR ativo (filtros incompatíveis)
         if cuda_accel and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
             cmd.extend(['-hwaccel', 'cuda'])
             # Só usar output format cuda se não tiver conversão HDR (que precisa filtros CPU)
             if not hdr_to_sdr:
                 cmd.extend(['-hwaccel_output_format', 'cuda'])
-                print(f"🔍 DIAGNÓSTICO: Usando pipeline CUDA COMPLETO (hwaccel_output_format cuda)")
+                print(f"[DEBUG] Usando pipeline CUDA COMPLETO (hwaccel_output_format cuda)")
             else:
-                print(f"🔍 DIAGNÓSTICO: Usando apenas hwaccel cuda (sem output format)")
+                print(f"[DEBUG] Usando apenas hwaccel cuda (sem output format)")
         
         cmd.extend(['-i', input_path])
         
@@ -221,31 +221,31 @@ class FFmpegWrapper:
         
         filter_complex = []
         
-        # ✅ FIX: Determinar se usamos filtros CUDA ou CPU
+        # [FIX] Determinar se usamos filtros CUDA ou CPU
         # Nota: Não usar filtros CUDA se HDR to SDR ativo (incompatível com filtros tonemap)
         use_cuda_filters = (cuda_accel and
                            codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc'] and
                            not hdr_to_sdr)
         
-        print(f"🔍 DIAGNÓSTICO: use_cuda_filters={use_cuda_filters}")
+        print(f"[DEBUG] use_cuda_filters={use_cuda_filters}")
         
         if deinterlace:
-            # ✅ FIX: Usar yadif_cuda quando CUDA ativo, bwdif caso contrário
+            # [FIX] Usar yadif_cuda quando CUDA ativo, bwdif caso contrário
             if use_cuda_filters:
                 filter_complex.append('yadif_cuda=mode=send_frame:parity=auto')
-                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CUDA: yadif_cuda")
+                print(f"[DEBUG] Adicionado filtro CUDA: yadif_cuda")
             else:
                 filter_complex.append('bwdif=mode=send:par=1')
-                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CPU: bwdif")
+                print(f"[DEBUG] Adicionado filtro CPU: bwdif")
         
         if resolution:
-            # ✅ FIX: Usar scale_cuda quando CUDA ativo para manter processamento na GPU
+            # [FIX] Usar scale_cuda quando CUDA ativo para manter processamento na GPU
             if use_cuda_filters:
                 filter_complex.append(f'scale_cuda=-2:{resolution}')
-                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CUDA: scale_cuda=-2:{resolution}")
+                print(f"[DEBUG] Adicionado filtro CUDA: scale_cuda=-2:{resolution}")
             else:
                 filter_complex.append(f'scale=-2:{resolution}')
-                print(f"🔍 DIAGNÓSTICO: Adicionado filtro CPU: scale=-2:{resolution}")
+                print(f"[DEBUG] Adicionado filtro CPU: scale=-2:{resolution}")
         
         if hdr_to_sdr:
             filter_complex.append('zscale=t=linear:npl=100')
@@ -253,11 +253,11 @@ class FFmpegWrapper:
             filter_complex.append('tonemap=hable:desat=0')
             filter_complex.append('zscale=t=bt709:m=bt709:r=tv')
             filter_complex.append('format=yuv420p')
-            print(f"🔍 DIAGNÓSTICO: Adicionado pipeline HDR to SDR")
+            print(f"[DEBUG] Adicionado pipeline HDR to SDR")
         
         if filter_complex:
             cmd.extend(['-vf', ','.join(filter_complex)])
-            print(f"🔍 DIAGNÓSTICO: Filtros finais: {','.join(filter_complex)}")
+            print(f"[DEBUG] Filtros finais: {','.join(filter_complex)}")
         
         cmd.extend(['-c:v', video_params['codec']])
         
@@ -283,18 +283,18 @@ class FFmpegWrapper:
             cmd.extend(['-b:v', bitrate])
         
         if codec not in ['libx265', 'libx264']:
-            # ✅ FIX APLICADO: Não especificar pix_fmt quando usando pipeline CUDA completo
+            # [FIX APLICADO] Não especificar pix_fmt quando usando pipeline CUDA completo
             # Quando usamos hwaccel_output_format cuda + scale_cuda, os frames estão na GPU
             # Especificar -pix_fmt yuv420p10le (formato CPU) causava conflito
             
             if use_cuda_filters:
                 # Pipeline CUDA completo: deixar o encoder NVENC escolher o formato automaticamente
                 # O encoder escolherá o formato CUDA nativo (p010le para 10-bit, nv12 para 8-bit)
-                print(f"✅ FIX: Pipeline CUDA completo - removendo -pix_fmt para evitar conversão CPU")
-                print(f"✅ FIX: Encoder {codec} escolherá formato CUDA nativo automaticamente")
+                print(f"[FIX] Pipeline CUDA completo - removendo -pix_fmt para evitar conversão CPU")
+                print(f"[FIX] Encoder {codec} escolherá formato CUDA nativo automaticamente")
             else:
                 # Pipeline CPU ou híbrido: especificar pix_fmt explicitamente
-                print(f"🔍 DEBUG: Pipeline CPU/híbrido - usando -pix_fmt {video_params['pix_fmt']}")
+                print(f"[DEBUG] Pipeline CPU/híbrido - usando -pix_fmt {video_params['pix_fmt']}")
                 cmd.extend(['-pix_fmt', video_params['pix_fmt']])
             
             # Profile sempre necessário
@@ -329,9 +329,9 @@ class FFmpegWrapper:
         
         cmd.append(output_path)
         
-        # 🔍 DIAGNÓSTICO: Log do comando completo
-        print(f"🔍 DIAGNÓSTICO: Comando FFmpeg completo construído:")
-        print(f"🔍 DIAGNÓSTICO: {' '.join(cmd)}")
+        # [DEBUG] Log do comando completo
+        print(f"[DEBUG] Comando FFmpeg completo construído:")
+        print(f"[DEBUG] {' '.join(cmd)}")
         
         return cmd
     
