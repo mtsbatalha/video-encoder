@@ -409,8 +409,8 @@ class FFmpegWrapper:
         ]:
             # Smart detection: only use CUDA hwaccel for non-4K files
             # 4K+ files (width >= 3840) use CPU decoding to avoid VRAM exhaustion
-            resolution = self.get_video_resolution(input_path)
-            use_cuda_hwaccel = resolution is None or (resolution[0] < 3840)
+            input_resolution = self.get_video_resolution(input_path)
+            use_cuda_hwaccel = input_resolution[0] < 3840
 
             if use_cuda_hwaccel:
                 cmd.extend(["-hwaccel", "cuda"])
@@ -419,7 +419,7 @@ class FFmpegWrapper:
                     cmd.extend(["-hwaccel_output_format", "cuda"])
             else:
                 print(
-                    f"[FFmpegWrapper] 4K+ video detected ({resolution[0]}x{resolution[1]}), using CPU decoding to save VRAM"
+                    f"[FFmpegWrapper] 4K+ video detected ({input_resolution[0]}x{input_resolution[1]}), using CPU decoding to save VRAM"
                 )
 
         cmd.extend(["-i", input_path])
