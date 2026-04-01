@@ -29,12 +29,43 @@ python vigia_nvenc.py --profile-list --hardware amd_igpu
 python vigia_nvenc.py --profile-list --hardware cpu
 ```
 
+## Execução do CLI
+
+O video-encoder pode ser executado de **três formas diferentes**:
+
+### Método 1: Script Wrapper (Recomendado)
+```bash
+# No Windows
+python run.py --interactive
+
+# No Linux/macOS
+python3 run.py --interactive
+```
+
+### Método 2: Como Módulo Python
+```bash
+# Forma curta
+python3 -m src --interactive
+
+# Forma explícita
+python3 -m src.cli --interactive
+```
+
+### Método 3: Script vigia_nvenc.py (Legado)
+```bash
+python vigia_nvenc.py --interactive
+```
+
+> **Nota:** NÃO execute diretamente `python3 src/cli.py`, pois isso causará erros de importação. Use um dos métodos acima.
+
 ## Uso Rápido
 
 ### CLI Moderna
 
 ```bash
 # Ajuda
+python run.py --help
+# ou
 python vigia_nvenc.py --help
 
 # Codificar arquivo único com perfil
@@ -319,6 +350,22 @@ success, error = ffmpeg.run_encoding(command)
 ```
 
 ## Troubleshooting
+
+### Problemas de Execução
+
+**"ImportError: attempted relative import with no known parent package"**
+
+Este erro ocorre ao tentar executar `python3 src/cli.py` diretamente. Use um dos métodos recomendados:
+
+```bash
+# Método 1: Script wrapper (mais simples)
+python3 run.py --interactive
+
+# Método 2: Como módulo Python
+python3 -m src --interactive
+```
+
+📖 **Guia Completo:** Consulte [`docs/IMPORT_ERROR_TROUBLESHOOTING.md`](docs/IMPORT_ERROR_TROUBLESHOOTING.md) para detalhes.
 
 ### Problemas Gerais
 
