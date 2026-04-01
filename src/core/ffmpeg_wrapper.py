@@ -196,10 +196,6 @@ class FFmpegWrapper:
         # [CUDA ACCEL] Adiciona flags de aceleração hardware para codecs NVIDIA
         cmd = [self.ffmpeg, '-y', '-stats']
         
-        # [DEBUG] Log de configuração inicial
-        print(f"[DEBUG] codec={codec}, cuda_accel={cuda_accel}, hdr_to_sdr={hdr_to_sdr}")
-        print(f"[DEBUG] resolution={resolution}, deinterlace={deinterlace}")
-        
         # [FIX] Adicionar aceleração CUDA para codecs NVIDIA
         # Nota: Não usar -hwaccel_output_format cuda se HDR to SDR ativo (filtros incompatíveis)
         if cuda_accel and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
@@ -207,9 +203,6 @@ class FFmpegWrapper:
             # Só usar output format cuda se não tiver conversão HDR (que precisa filtros CPU)
             if not hdr_to_sdr:
                 cmd.extend(['-hwaccel_output_format', 'cuda'])
-                print(f"[DEBUG] Usando pipeline CUDA COMPLETO (hwaccel_output_format cuda)")
-            else:
-                print(f"[DEBUG] Usando apenas hwaccel cuda (sem output format)")
         
         cmd.extend(['-i', input_path])
         
@@ -227,25 +220,19 @@ class FFmpegWrapper:
                            codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc'] and
                            not hdr_to_sdr)
         
-        print(f"[DEBUG] use_cuda_filters={use_cuda_filters}")
-        
         if deinterlace:
             # [FIX] Usar yadif_cuda quando CUDA ativo, bwdif caso contrário
             if use_cuda_filters:
                 filter_complex.append('yadif_cuda=mode=send_frame:parity=auto')
-                print(f"[DEBUG] Adicionado filtro CUDA: yadif_cuda")
             else:
                 filter_complex.append('bwdif=mode=send:par=1')
-                print(f"[DEBUG] Adicionado filtro CPU: bwdif")
         
         if resolution:
             # [FIX] Usar scale_cuda quando CUDA ativo para manter processamento na GPU
             if use_cuda_filters:
                 filter_complex.append(f'scale_cuda=-2:{resolution}')
-                print(f"[DEBUG] Adicionado filtro CUDA: scale_cuda=-2:{resolution}")
             else:
                 filter_complex.append(f'scale=-2:{resolution}')
-                print(f"[DEBUG] Adicionado filtro CPU: scale=-2:{resolution}")
         
         if hdr_to_sdr:
             filter_complex.append('zscale=t=linear:npl=100')
@@ -253,11 +240,9 @@ class FFmpegWrapper:
             filter_complex.append('tonemap=hable:desat=0')
             filter_complex.append('zscale=t=bt709:m=bt709:r=tv')
             filter_complex.append('format=yuv420p')
-            print(f"[DEBUG] Adicionado pipeline HDR to SDR")
         
         if filter_complex:
             cmd.extend(['-vf', ','.join(filter_complex)])
-            print(f"[DEBUG] Filtros finais: {','.join(filter_complex)}")
         
         cmd.extend(['-c:v', video_params['codec']])
         
@@ -290,11 +275,10 @@ class FFmpegWrapper:
             if use_cuda_filters:
                 # Pipeline CUDA completo: deixar o encoder NVENC escolher o formato automaticamente
                 # O encoder escolherá o formato CUDA nativo (p010le para 10-bit, nv12 para 8-bit)
-                print(f"[FIX] Pipeline CUDA completo - removendo -pix_fmt para evitar conversão CPU")
-                print(f"[FIX] Encoder {codec} escolherá formato CUDA nativo automaticamente")
+                # [FIX] Pipeline CUDA completo - removendo -pix_fmt para evitar conversão CPU
+                # O encoder escolherá o formato CUDA nativo (p010le para 10-bit, nv12 para 8-bit)
             else:
                 # Pipeline CPU ou híbrido: especificar pix_fmt explicitamente
-                print(f"[DEBUG] Pipeline CPU/híbrido - usando -pix_fmt {video_params['pix_fmt']}")
                 cmd.extend(['-pix_fmt', video_params['pix_fmt']])
             
             # Profile sempre necessário
@@ -328,10 +312,6 @@ class FFmpegWrapper:
         cmd.extend(['-movflags', '+faststart'])
         
         cmd.append(output_path)
-        
-        # [DEBUG] Log do comando completo
-        print(f"[DEBUG] Comando FFmpeg completo construído:")
-        print(f"[DEBUG] {' '.join(cmd)}")
         
         return cmd
     

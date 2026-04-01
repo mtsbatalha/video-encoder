@@ -168,12 +168,8 @@ class QueueMenuUI:
         
         running_jobs = self.job_mgr.get_running_jobs()
         
-        self.console.print(f"[yellow][DEBUG show_submenu] Jobs em execução detectados: {len(running_jobs) if running_jobs else 0}[/yellow]")
-        
         if running_jobs:
-            self.console.print(f"[yellow][DEBUG] Chamando _show_live_monitor_for_existing_jobs()...[/yellow]")
             self._show_live_monitor_for_existing_jobs()
-            self.console.print(f"[yellow][DEBUG] Retornou de _show_live_monitor_for_existing_jobs()[/yellow]")
         
         while True:
             self.menu.clear()
@@ -862,8 +858,6 @@ class QueueMenuUI:
     
     def _show_live_monitor_for_existing_jobs(self):
         """Mostra monitor em tempo real para jobs já em execução."""
-        self.console.print(f"[yellow][DEBUG _show_live_monitor] Método chamado![/yellow]")
-        
         try:
             from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
             from ..core.hw_monitor import HardwareMonitor
@@ -879,10 +873,8 @@ class QueueMenuUI:
         self.console.print("[bold cyan]Verificando jobs em execução...[/bold cyan]\n")
         
         running_jobs = self.job_mgr.get_running_jobs()
-        self.console.print(f"[yellow][DEBUG _show_live_monitor] Jobs encontrados: {len(running_jobs) if running_jobs else 0}[/yellow]")
         
         if not running_jobs:
-            self.console.print(f"[yellow][DEBUG _show_live_monitor] Retornando pois não há jobs[/yellow]")
             return
         
         self.console.print(f"[green]Encontrados {len(running_jobs)} job(s) em execução[/green]\n")
@@ -894,7 +886,6 @@ class QueueMenuUI:
             self.console.print()
         
         if self.menu.ask_confirm("Deseja monitorar o progresso destes jobs?", default=True):
-            self.console.print(f"[yellow][DEBUG _show_live_monitor] Usuário confirmou monitoramento[/yellow]")
             encoder = EncoderEngine(max_concurrent=1, queue_manager=self.queue_mgr)
             hw_monitor = HardwareMonitor()
             

@@ -77,7 +77,7 @@ class RealTimeEncodingMonitor:
         self._transcode_status: Dict[str, str] = {}  # 'video', 'audio', 'subtitle'
         
         # Controle de debug
-        self._debug_enabled: bool = True  # [DEBUG PATCH] Forçar debug ativo
+        self._debug_enabled: bool = False  # Debug desativado por padrão
         self._debug_logs: List[str] = []
         self._max_debug_logs: int = 50  # Máximo de logs para manter na tela
     
