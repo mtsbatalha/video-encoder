@@ -308,18 +308,7 @@ class EncoderEngine:
         self.realtime_monitor.add_debug_log(f"Comando FFmpeg iniciado")
         
         def progress_callback(output: str):
-            # [DEBUG PATCH] Log callback sendo chamado
-            if not hasattr(progress_callback, '_call_count'):
-                progress_callback._call_count = 0
-            progress_callback._call_count += 1
-            if progress_callback._call_count <= 3 or progress_callback._call_count % 10 == 0:
-                print(f"\n[CALLBACK #{progress_callback._call_count}] {output[:100]}")
-            
             stats = parser.parse_line(output)
-            
-            # [DEBUG PATCH] Log stats extraídos
-            if stats and (progress_callback._call_count <= 3 or progress_callback._call_count % 10 == 0):
-                print(f"[STATS] {stats}")
             
             if 'fps' in stats:
                 self.realtime_monitor.update_encoding_stats(fps=stats['fps'])
