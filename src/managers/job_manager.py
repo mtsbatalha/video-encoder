@@ -5,6 +5,7 @@ from typing import Optional, Dict, List, Any
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
+import psutil
 
 
 class JobStatus(Enum):
@@ -37,14 +38,97 @@ class Job:
 class JobManager:
     """Gerenciador de jobs de encoding."""
     
-    def __init__(self, jobs_dir: Optional[str] = None):
+    def __init__(self, jobs_dir: Optional[str] = None, max_concurrent_jobs: Optional[int] = None):
         self.jobs_dir = Path(jobs_dir) if jobs_dir else Path(__file__).parent.parent.parent / "jobs"
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self._jobs_file = self.jobs_dir / "jobs.json"
         self._jobs: Dict[str, Dict[str, Any]] = {}
         self._lock = __import__('threading').Lock()
         self._status_callbacks: Dict[str, List[callable]] = {}  # Callbacks por job_id
+        
+        # Hardware detection and job limits
+        self._max_concurrent_jobs = max_concurrent_jobs or self._calculate_max_concurrent_jobs()
+        self._active_jobs = set()
+        
         self.load()
+    
+    def _calculate_max_concurrent_jobs(self) -> int:
+        """Calcula o número máximo de jobs simultâneos baseado no hardware disponível."""
+        try:
+            # Importar o detector de hardware
+            from ..core.hw_detector import HardwareDetector
+            
+            detector = HardwareDetector()
+            caps = detector.detect()
+            
+            # Calcular limite baseado em GPU e CPU
+            max_by_gpu = 0
+            max_by_cpu = max(1, caps.cpu_cores // 2)  # 1-2 cores por job
+            
+            # Verificar GPUs NVIDIA (mais comum para encoding)
+            for gpu in caps.gpus_nvidia:
+                if gpu.get('nvenc_supported', False):
+                    # Estimativa: ~6GB VRAM por job 4K NVENC
+                    vram_per_job_gb = 6.0
+                    gpu_max_jobs = int(gpu.get('memory_gb', 0) / vram_per_job_gb)
+                    max_by_gpu = max(max_by_gpu, gpu_max_jobs)
+            
+            # Verificar GPUs AMD
+            for gpu in caps.gpus_amd:
+                if gpu.get('amf_supported', False):
+                    # Estimativa: ~4GB VRAM por job 4K AMF
+                    vram_per_job_gb = 4.0
+                    gpu_max_jobs = int(gpu.get('vram_gb', 0) / vram_per_job_gb)
+                    max_by_gpu = max(max_by_gpu, gpu_max_jobs)
+            
+            # Verificar iGPUs
+            if caps.igpu_intel and caps.igpu_intel.get('qsv_supported', False):
+                # iGPU Intel pode lidar com 1-2 jobs dependendo da potência
+                max_by_gpu = max(max_by_gpu, 2)
+            
+            if caps.igpu_amd and caps.igpu_amd.get('amf_supported', False):
+                # iGPU AMD pode lidar com 1-2 jobs dependendo da potência
+                max_by_gpu = max(max_by_gpu, 2)
+            
+            # O limite é determinado pelo recurso mais restritivo
+            if max_by_gpu > 0:
+                return min(max_by_gpu, max_by_cpu)
+            else:
+                # Se não houver GPU, usar apenas CPU
+                return max_by_cpu
+        except Exception as e:
+            # Em caso de erro, retornar um valor padrão seguro
+            print(f"Erro ao calcular limite de jobs: {e}")
+            return 2  # Valor padrão seguro
+    
+    def get_max_concurrent_jobs(self) -> int:
+        """Retorna o número máximo de jobs simultâneos permitidos."""
+        return self._max_concurrent_jobs
+    
+    def get_current_running_jobs_count(self) -> int:
+        """Retorna o número atual de jobs em execução."""
+        return len(self._active_jobs)
+    
+    def can_start_new_job(self) -> bool:
+        """Verifica se é possível iniciar um novo job."""
+        return self.get_current_running_jobs_count() < self.get_max_concurrent_jobs()
+    
+    def register_active_job(self, job_id: str) -> bool:
+        """Registra um job como ativo (em execução)."""
+        with self._lock:
+            if self.can_start_new_job():
+                self._active_jobs.add(job_id)
+                return True
+            return False
+    
+    def unregister_active_job(self, job_id: str) -> None:
+        """Remove um job da lista de ativos."""
+        with self._lock:
+            self._active_jobs.discard(job_id)
+    
+    def get_active_jobs(self) -> List[str]:
+        """Retorna a lista de IDs dos jobs ativos."""
+        return list(self._active_jobs)
     
     def load(self) -> Dict[str, Dict[str, Any]]:
         """Carrega jobs do arquivo."""
@@ -125,12 +209,22 @@ class JobManager:
             
             old_status = self._jobs[job_id]["status"]
             
-            self._jobs[job_id]["status"] = status.value
-            
-            if status == JobStatus.RUNNING:
-                self._jobs[job_id]["started_at"] = datetime.now().isoformat()
-            elif status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+            # Registrar/desregistrar job ativo conforme status
+            if status == JobStatus.RUNNING and old_status != JobStatus.RUNNING.value:
+                if self.register_active_job(job_id):
+                    self._jobs[job_id]["started_at"] = datetime.now().isoformat()
+                else:
+                    # Não pode iniciar novo job, manter status anterior
+                    return False
+            elif old_status == JobStatus.RUNNING.value and status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+                self.unregister_active_job(job_id)
                 self._jobs[job_id]["completed_at"] = datetime.now().isoformat()
+            elif status == JobStatus.RUNNING:
+                self._jobs[job_id]["started_at"] = datetime.now().isoformat()
+            elif status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED] and not self._jobs[job_id].get("completed_at"):
+                self._jobs[job_id]["completed_at"] = datetime.now().isoformat()
+            
+            self._jobs[job_id]["status"] = status.value
             
             for key, value in kwargs.items():
                 self._jobs[job_id][key] = value

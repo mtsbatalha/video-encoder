@@ -7,8 +7,13 @@ from rich.text import Text
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
-from ..managers.queue_manager import QueueManager, QueuePriority
-from ..managers.job_manager import JobManager, JobStatus
+try:
+    from ..managers.queue_manager import QueueManager, QueuePriority
+    from ..managers.job_manager import JobManager, JobStatus
+except ImportError:
+    # Para testes diretos
+    from managers.queue_manager import QueueManager, QueuePriority
+    from managers.job_manager import JobManager, JobStatus
 from .menu import Menu
 
 
@@ -73,6 +78,75 @@ class QueueMenuUI:
         else:
             return "[dim]⏳ Pendente[/dim]"
     
+    def _calculate_eta_and_speed(self, job_info: Dict[str, Any]) -> tuple:
+        """Calcula ETA e velocidade de encoding para um job."""
+        import math
+        from datetime import datetime
+        
+        if not job_info.get('started_at'):
+            return ("--", "--", "--")
+        
+        try:
+            started_at = datetime.fromisoformat(job_info['started_at'])
+            current_time = datetime.now()
+            elapsed_time = current_time - started_at
+            
+            progress = job_info.get('progress', 0)
+            
+            if progress <= 0:
+                return ("--", "--", "--")
+            
+            # Calcular velocidade (tempo por percentagem)
+            elapsed_seconds = elapsed_time.total_seconds()
+            speed_percent_per_sec = progress / elapsed_seconds if elapsed_seconds > 0 else 0
+            speed_percent_per_min = speed_percent_per_sec * 60 if speed_percent_per_sec > 0 else 0
+            
+            # Calcular ETA
+            remaining_percent = 100 - progress
+            eta_seconds = remaining_percent / speed_percent_per_sec if speed_percent_per_sec > 0 else 0
+            eta_str = self._format_duration(eta_seconds) if eta_seconds > 0 else "--"
+            
+            # Formatar velocidade
+            speed_str = f"{speed_percent_per_min:.1f}%/min" if speed_percent_per_min > 0 else "--"
+            
+            # Formatar tempo decorrido
+            elapsed_str = self._format_duration(elapsed_seconds)
+            
+            return (elapsed_str, eta_str, speed_str)
+        except Exception:
+            return ("--", "--", "--")
+    
+    def _format_duration(self, seconds: float) -> str:
+        """Formata duração em segundos para HH:MM:SS."""
+        if seconds <= 0:
+            return "--"
+        
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{minutes:02d}:{secs:02d}"
+    
+    def _format_file_size(self, size_bytes: int) -> str:
+        """Formata tamanho de arquivo em unidades legíveis."""
+        if size_bytes <= 0:
+            return "0 B"
+        
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.1f} PB"
+    
+    def _get_job_resources_usage(self, job_id: str) -> str:
+        """Obtém uso de recursos para um job específico (placeholder)."""
+        # Esta função seria implementada com dados reais de uso de recursos
+        # Por enquanto, retornamos um placeholder
+        return "N/A"
+    
     def show_submenu(self):
         """Exibe submenu de gerenciamento de fila."""
         from rich.live import Live
@@ -115,7 +189,8 @@ class QueueMenuUI:
                     {"description": "Remover job específico", "shortcut": "4"},
                     {"description": "Mover prioridade do job", "shortcut": "5"},
                     {"description": "Processar fila agora", "shortcut": "6"},
-                    {"description": "Voltar", "shortcut": "7"}
+                    {"description": "Gerenciar job individual", "shortcut": "7"},
+                    {"description": "Voltar", "shortcut": "8"}
                 ]
             else:
                 self.menu.print_info("Fila vazia")
@@ -150,18 +225,24 @@ class QueueMenuUI:
             elif choice == 5:
                 self._process_queue_with_monitor()
             elif choice == 6:
+                self._manage_individual_job()
+            elif choice == 7:
                 break
     
     def _show_queue_table(self, queue: List[Dict[str, Any]]):
-        """Exibe tabela da fila."""
+        """Exibe tabela da fila com informações detalhadas."""
         table = Table(title="Fila de Jobs", show_header=True, header_style="bold magenta")
         table.add_column("#", style="dim", width=4)
         table.add_column("Job ID", style="dim", width=10)
-        table.add_column("Input", style="cyan", width=35)
-        table.add_column("Output", style="green", width=25)
-        table.add_column("Perfil", style="blue", width=12)
+        table.add_column("Input", style="cyan", width=25)
+        table.add_column("Output", style="green", width=15)
+        table.add_column("Perfil", style="blue", width=10)
         table.add_column("Status", style="white", width=12)
         table.add_column("Prog.", style="white", width=8)
+        table.add_column("Tempo", style="yellow", width=10)
+        table.add_column("ETA", style="magenta", width=10)
+        table.add_column("Veloc.", style="cyan", width=10)
+        table.add_column("Tamanho", style="white", width=15)
         table.add_column("Prioridade", style="yellow", width=10)
         
         priorities = {1: 'LOW', 2: 'NORMAL', 3: 'HIGH', 4: 'CRITICAL'}
@@ -182,14 +263,35 @@ class QueueMenuUI:
             else:
                 progress_display = "[dim]--[/dim]"
             
+            # Calcular informações detalhadas
+            elapsed_time = "--"
+            eta = "--"
+            speed = "--"
+            
+            if job_info and status == 'running':
+                elapsed_time, eta, speed = self._calculate_eta_and_speed(job_info)
+            
+            # Formatar tamanhos
+            input_size = "--"
+            output_size = "--"
+            if job_info:
+                input_size = self._format_file_size(job_info.get('input_size', 0))
+                output_size = self._format_file_size(job_info.get('output_size', 0))
+            
+            size_display = f"{input_size}→{output_size}"
+            
             table.add_row(
                 str(i),
                 item['job_id'][:8],
-                Path(item['input_path']).name[:33],
-                Path(item['output_path']).name[:23],
-                item['profile'].get('name', '')[:10],
+                Path(item['input_path']).name[:23],
+                Path(item['output_path']).name[:13],
+                item['profile'].get('name', '')[:8],
                 status_display,
                 progress_display,
+                elapsed_time,
+                eta,
+                speed,
+                size_display,
                 priorities.get(item['priority'], 'NORMAL')
             )
         
@@ -421,8 +523,13 @@ class QueueMenuUI:
     
     def _process_queue_with_monitor(self):
         """Processa fila com monitor em tempo real."""
-        from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
-        from ..core.hw_monitor import HardwareMonitor
+        try:
+            from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
+            from ..core.hw_monitor import HardwareMonitor
+        except ImportError:
+            # Para testes diretos
+            from core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
+            from core.hw_monitor import HardwareMonitor
         import time
         
         queue = self.queue_mgr.list_queue()
@@ -498,10 +605,241 @@ class QueueMenuUI:
         
         self.console.input("\nPressione Enter para continuar...")
     
+    def _manage_individual_job(self):
+        """Submenu para gerenciar job individual."""
+        from rich.panel import Panel
+        from datetime import datetime
+        
+        # Obter todos os jobs (ativos e na fila)
+        all_jobs = self.job_mgr.list_jobs()
+        if not all_jobs:
+            self.menu.print_info("Nenhum job encontrado")
+            return
+        
+        self.menu.clear()
+        self.menu.print_header("Gerenciar Job Individual")
+        
+        # Filtrar jobs que podem ser gerenciados (não-completos)
+        manageable_jobs = [job for job in all_jobs if job['status'] not in ['completed', 'cancelled', 'failed']]
+        
+        if not manageable_jobs:
+            self.menu.print_info("Nenhum job ativo para gerenciar")
+            return
+        
+        table = Table(title="Jobs Disponíveis", show_header=True, header_style="bold cyan")
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Job ID", style="dim", width=10)
+        table.add_column("Input", style="cyan")
+        table.add_column("Status", style="white", width=15)
+        table.add_column("Progresso", style="green", width=10)
+        
+        for i, job in enumerate(manageable_jobs, 1):
+            status_display = self._get_status_display(job['status'])
+            progress = job.get('progress', 0)
+            progress_display = f"{progress:.1f}%" if progress > 0 else "--"
+            
+            table.add_row(
+                str(i),
+                job['id'][:8],
+                Path(job['input_path']).name[:40],
+                status_display,
+                progress_display
+            )
+        
+        self.console.print(table)
+        self.console.print()
+        
+        choice = self.menu.ask_int(
+            "Número do job para gerenciar (0 para cancelar)",
+            default=0
+        )
+        
+        if choice == 0:
+            return
+        
+        if 1 <= choice <= len(manageable_jobs):
+            selected_job = manageable_jobs[choice - 1]
+            self._show_job_management_options(selected_job)
+        else:
+            self.menu.print_error("Opção inválida")
+            self.console.input("\nPressione Enter para continuar...")
+    
+    def _show_job_management_options(self, job: Dict[str, Any]):
+        """Mostra opções de gerenciamento para um job específico."""
+        from rich.panel import Panel
+        from datetime import datetime
+        
+        self.menu.clear()
+        self.menu.print_header(f"Gerenciar Job: {job['id'][:8]}")
+        
+        # Exibir detalhes do job
+        content = Text()
+        content.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", style="dim")
+        content.append("DETALHES DO JOB\n", style="bold yellow")
+        content.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n", style="dim")
+        
+        content.append("📋 Job ID: ", style="cyan")
+        content.append(f"{job['id']}\n", style="white")
+        
+        content.append("📁 Input: ", style="cyan")
+        content.append(f"{Path(job['input_path']).name}\n", style="white")
+        
+        content.append("💾 Output: ", style="cyan")
+        content.append(f"{Path(job['output_path']).name}\n", style="white")
+        
+        content.append("🎬 Perfil: ", style="cyan")
+        content.append(f"{job['profile_name']}\n", style="white")
+        
+        content.append("📊 Status: ", style="cyan")
+        content.append(f"{self._get_status_display(job['status'])}\n", style="white")
+        
+        progress = job.get('progress', 0)
+        content.append("📈 Progresso: ", style="cyan")
+        content.append(f"{progress:.1f}%\n", style="green")
+        
+        # Mostrar informações de tempo se estiver em execução
+        if job['status'] == 'running':
+            elapsed, eta, speed = self._calculate_eta_and_speed(job)
+            content.append("⏱️ Tempo decorrido: ", style="cyan")
+            content.append(f"{elapsed}\n", style="white")
+            content.append("⏰ ETA estimada: ", style="cyan")
+            content.append(f"{eta}\n", style="white")
+            content.append("⚡ Velocidade: ", style="cyan")
+            content.append(f"{speed}\n", style="white")
+        
+        created_at = job.get('created_at')
+        if created_at:
+            try:
+                dt = datetime.fromisoformat(created_at)
+                content.append("🕐 Criado em: ", style="cyan")
+                content.append(f"{dt.strftime('%d/%m/%Y %H:%M:%S')}\n", style="white")
+            except Exception:
+                pass
+        
+        started_at = job.get('started_at')
+        if started_at:
+            try:
+                dt = datetime.fromisoformat(started_at)
+                content.append("▶️ Iniciado em: ", style="cyan")
+                content.append(f"{dt.strftime('%d/%m/%Y %H:%M:%S')}\n", style="white")
+            except Exception:
+                pass
+        
+        # Tamanhos
+        input_size = self._format_file_size(job.get('input_size', 0))
+        output_size = self._format_file_size(job.get('output_size', 0))
+        content.append("📏 Tamanho: ", style="cyan")
+        content.append(f"{input_size} → {output_size}\n", style="white")
+        
+        content.append("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n", style="dim")
+        
+        self.console.print(Panel(content, border_style="yellow", title=f"[bold]Job {job['id'][:8]}[/bold]"))
+        self.console.print()
+        
+        # Opções de gerenciamento
+        options = [
+            {"description": "Cancelar job", "shortcut": "1"},
+            {"description": "Pausar job" if job['status'] == 'running' else "Retomar job", "shortcut": "2"},
+            {"description": "Ver logs detalhados", "shortcut": "3"},
+            {"description": "Voltar", "shortcut": "4"}
+        ]
+        
+        choice = self.menu.show_menu("Opções de Gerenciamento", options)
+        
+        if choice == 0:  # Cancelar job
+            self._cancel_job_confirmation(job['id'])
+        elif choice == 1:  # Pausar/Retomar
+            if job['status'] == 'running':
+                self._pause_job(job['id'])
+            else:
+                self._resume_job(job['id'])
+        elif choice == 2:  # Ver logs
+            self._view_job_logs(job['id'])
+        elif choice == 3:  # Voltar
+            return
+    
+    def _cancel_job_confirmation(self, job_id: str):
+        """Confirmação para cancelar job."""
+        job = self.job_mgr.get_job(job_id)
+        if not job:
+            self.menu.print_error("Job não encontrado")
+            return
+        
+        self.console.print(f"\n[bold red]⚠ ATENÇÃO: Cancelar job {job_id[:8]}?[/bold red]")
+        self.console.print("[yellow]Esta operação não pode ser desfeita.[/yellow]")
+        
+        if self.menu.ask_confirm("Confirmar cancelamento?"):
+            # Atualizar status do job para cancelled
+            try:
+                from ..managers.job_manager import JobStatus
+            except ImportError:
+                from managers.job_manager import JobStatus
+                
+            if self.job_mgr.update_job_status(job_id, JobStatus.CANCELLED):
+                # Remover da fila se estiver lá
+                self.queue_mgr.remove_from_queue(job_id)
+                
+                self.menu.print_success(f"Job {job_id[:8]} cancelado")
+            else:
+                self.menu.print_error("Erro ao cancelar job")
+        
+        self.console.input("\nPressione Enter para continuar...")
+    
+    def _pause_job(self, job_id: str):
+        """Pausa um job em execução."""
+        try:
+            from ..managers.job_manager import JobStatus
+        except ImportError:
+            from managers.job_manager import JobStatus
+            
+        job = self.job_mgr.get_job(job_id)
+        if not job:
+            self.menu.print_error("Job não encontrado")
+            return
+        
+        # Atualizar status do job para paused
+        if self.job_mgr.update_job_status(job_id, JobStatus.PAUSED):
+            self.menu.print_success(f"Job {job_id[:8]} pausado")
+        else:
+            self.menu.print_error("Erro ao pausar job")
+        
+        self.console.input("\nPressione Enter para continuar...")
+    
+    def _resume_job(self, job_id: str):
+        """Retoma um job pausado."""
+        try:
+            from ..managers.job_manager import JobStatus
+        except ImportError:
+            from managers.job_manager import JobStatus
+            
+        job = self.job_mgr.get_job(job_id)
+        if not job:
+            self.menu.print_error("Job não encontrado")
+            return
+        
+        # Atualizar status do job para running
+        if self.job_mgr.update_job_status(job_id, JobStatus.RUNNING):
+            self.menu.print_success(f"Job {job_id[:8]} retomado")
+        else:
+            self.menu.print_error("Erro ao retomar job")
+        
+        self.console.input("\nPressione Enter para continuar...")
+    
+    def _view_job_logs(self, job_id: str):
+        """Visualiza logs detalhados do job."""
+        # Placeholder para visualização de logs
+        self.menu.print_info("Visualização de logs detalhados não implementada")
+        self.console.input("\nPressione Enter para continuar...")
+    
     def _show_live_monitor_for_existing_jobs(self):
         """Mostra monitor em tempo real para jobs já em execução."""
-        from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
-        from ..core.hw_monitor import HardwareMonitor
+        try:
+            from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
+            from ..core.hw_monitor import HardwareMonitor
+        except ImportError:
+            # Para testes diretos
+            from core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
+            from core.hw_monitor import HardwareMonitor
         from ..ui.realtime_monitor import RealTimeEncodingMonitor, FFmpegProgressParser
         from ..core.ffmpeg_wrapper import FFmpegWrapper
         import time

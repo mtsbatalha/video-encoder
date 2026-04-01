@@ -24,6 +24,7 @@
   },
   "encoding": {
     "max_concurrent": 2,
+    "max_concurrent_jobs": null,
     "priority": "normal",
     "auto_cleanup": true,
     "disk_space_min_gb": 10,
