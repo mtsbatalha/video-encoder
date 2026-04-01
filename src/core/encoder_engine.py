@@ -307,7 +307,6 @@ class EncoderEngine:
             subtitle_burn=profile.get('subtitle_burn', False),
             plex_compatible=profile.get('plex_compatible', True)
         )
-        self.realtime_monitor.add_debug_log(f"Comando FFmpeg iniciado")
         
         def progress_callback(output: str):
             stats = parser.parse_line(output)

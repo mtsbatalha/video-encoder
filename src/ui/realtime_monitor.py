@@ -293,7 +293,8 @@ class RealTimeEncodingMonitor:
         base_factor = compression_factors.get(codec, 0.5)
         
         if cq:
-            cq_value = int(cq) if cq.isdigit() else 20
+            # Garante que cq seja tratado como string ou int
+            cq_value = int(cq) if isinstance(cq, int) else (int(cq) if cq.isdigit() else 20)
             # CQ menor = maior qualidade = maior arquivo
             # CQ típico: 18-30 para HEVC
             if codec in ['hevc_nvenc', 'hevc_amf', 'hevc_qsv', 'libx265']:

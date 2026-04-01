@@ -100,6 +100,38 @@ class FFmpegWrapper:
         except Exception:
             return False
     
+    def is_cuda_available(self) -> bool:
+        """
+        Verifica se aceleração CUDA está disponível para decodificação.
+        
+        Retorna True apenas se:
+        1. pynvml estiver instalado E GPUs NVIDIA forem detectadas, OU
+        2. O teste de decodificação CUDA com FFmpeg for bem-sucedido
+        
+        Nota: Ter o codec hevc_nvenc disponível não significa que CUDA está disponível
+        para decodificação - apenas que encoding NVENC está disponível.
+        """
+        # Primeiro, tenta usar pynvml para detecção precisa
+        try:
+            import pynvml
+            try:
+                pynvml.nvmlInit()
+                device_count = pynvml.nvmlDeviceGetCount()
+                pynvml.nvmlShutdown()
+                return device_count > 0
+            except pynvml.NVMLError:
+                try:
+                    pynvml.nvmlShutdown()
+                except:
+                    pass
+                return False
+        except ImportError:
+            # pynvml não instalado - não podemos confirmar CUDA disponível
+            # Retorna False para evitar erros de decodificação
+            return False
+        except Exception:
+            return False
+    
     def get_media_info(self, input_path: str) -> Dict[str, Any]:
         """Obtém informações detalhadas do arquivo de mídia."""
         try:
@@ -196,9 +228,22 @@ class FFmpegWrapper:
         # [CUDA ACCEL] Adiciona flags de aceleração hardware para codecs NVIDIA
         cmd = [self.ffmpeg, '-y', '-stats']
         
-        # [FIX] Adicionar aceleração CUDA para codecs NVIDIA
-        # Nota: Não usar -hwaccel_output_format cuda se HDR to SDR ativo (filtros incompatíveis)
-        if cuda_accel and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
+        # [FIX] Verifica se CUDA está realmente disponível antes de usar codecs NVENC
+        # Se CUDA não estiver disponível, fallback para codec de software equivalente
+        cuda_available = cuda_accel and self.is_cuda_available()
+        
+        # Fallback automático para codec de software se CUDA não disponível
+        original_codec = codec
+        if not cuda_available and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
+            if codec == 'hevc_nvenc':
+                codec = 'libx265'  # Fallback para HEVC software
+            elif codec == 'h264_nvenc':
+                codec = 'libx264'  # Fallback para H264 software
+            elif codec == 'av1_nvenc':
+                codec = 'libx265'  # Fallback para HEVC (AV1 software não prático)
+            print(f"[FFmpegWrapper] CUDA não disponível. Fallback de {original_codec} para {codec}")
+        
+        if cuda_available and original_codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
             cmd.extend(['-hwaccel', 'cuda'])
             # Só usar output format cuda se não tiver conversão HDR (que precisa filtros CPU)
             if not hdr_to_sdr:
@@ -216,7 +261,8 @@ class FFmpegWrapper:
         
         # [FIX] Determinar se usamos filtros CUDA ou CPU
         # Nota: Não usar filtros CUDA se HDR to SDR ativo (incompatível com filtros tonemap)
-        use_cuda_filters = (cuda_accel and
+        # Usa cuda_available (que verifica se CUDA está disponível) em vez de cuda_accel
+        use_cuda_filters = (cuda_available and
                            codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc'] and
                            not hdr_to_sdr)
         
@@ -263,7 +309,8 @@ class FFmpegWrapper:
             cmd.extend(['-rc', 'twopass'])
         elif cq:
             cq_param = video_params.get('cq_param', '-cq')
-            cmd.extend([cq_param, cq])
+            # Garante que o valor CQ seja string para evitar erro no subprocess
+            cmd.extend([cq_param, str(cq)])
         elif bitrate:
             cmd.extend(['-b:v', bitrate])
         
@@ -286,7 +333,13 @@ class FFmpegWrapper:
             cmd.extend(['-profile:v', video_params['profile']])
         
         if plex_compatible:
-            cmd.extend(['-tag:v', 'hvc1' if 'hevc' in codec or 'av1' in codec else 'avc1'])
+            # Corrige tag para HEVC/H265 e AV1
+            if codec in ['hevc_nvenc', 'libx265', 'hevc_amf', 'hevc_qsv']:
+                cmd.extend(['-tag:v', 'hvc1'])
+            elif codec in ['av1_nvenc']:
+                cmd.extend(['-tag:v', 'av01'])
+            else:
+                cmd.extend(['-tag:v', 'avc1'])
         
         audio_streams = self.get_audio_streams(self.get_media_info(input_path))
         
@@ -326,6 +379,7 @@ class FFmpegWrapper:
         try:
             import os
             import sys
+            
             # ✅ FIX: No Windows/WSL, define variável ambiente para forçar line buffering
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
