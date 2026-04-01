@@ -68,6 +68,9 @@ class EncoderEngine:
         """Adiciona job à fila."""
         with self._lock:
             self._jobs[job.id] = job
+        print(
+            f"[ENCODER] add_job called: job_id={job.id[:8] if job.id else 'NO_ID'}, total jobs in _jobs: {len(self._jobs)}"
+        )
         return job.id
 
     def remove_job(self, job_id: str) -> bool:
@@ -210,6 +213,9 @@ class EncoderEngine:
     def _executor_loop(self):
         """Loop principal do executor."""
         while self._running:
+            print(
+                f"[ENCODER LOOP] iteration, _running={self._running}, _jobs count: {len(self._jobs)}, _active count: {len(self._active_jobs)}"
+            )
             self._pause_event.wait()
 
             with self._lock:
@@ -223,6 +229,8 @@ class EncoderEngine:
                     if job.status == EncodingStatus.PENDING
                 ]
 
+                print(f"[ENCODER LOOP] pending jobs found: {len(pending_jobs)}")
+
                 if not pending_jobs:
                     time.sleep(1)
                     continue
@@ -232,6 +240,12 @@ class EncoderEngine:
                 job.status = EncodingStatus.RUNNING
                 job.started_at = time.time()
                 self._active_jobs[job_id] = job
+                print(
+                    f"[ENCODER LOOP] About to execute job: {job_id[:8] if job_id else 'NO_ID'}"
+                )
+                print(
+                    f"[ENCODER LOOP] Job moved to active, _active count: {len(self._active_jobs)}"
+                )
 
             for callback in self._status_callbacks:
                 callback(job_id, EncodingStatus.RUNNING)
@@ -263,6 +277,7 @@ class EncoderEngine:
 
     def _execute_job(self, job: EncodingJob) -> tuple[bool, str]:
         """Executa job de encoding."""
+        print(f"[ENCODER EXECUTE] Starting _execute_job for job_id={job.id[:8]}")
         from pathlib import Path
 
         try:
