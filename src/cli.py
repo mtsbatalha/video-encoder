@@ -1514,9 +1514,10 @@ def main():
     # Usar o novo UnifiedQueueManager em vez de QueueManager e JobManager separados
     unified_queue_mgr = UnifiedQueueManager()
     
-    # Manter referências antigas para compatibilidade
-    job_mgr = JobManager()
-    queue_mgr = unified_queue_mgr  # Usar UnifiedQueueManager como QueueManager
+    # Usar UnifiedQueueManager para ambas as referências (queue_mgr E job_mgr)
+    # Isso garante que toda a aplicação use um único gerenciador unificado
+    job_mgr = unified_queue_mgr  # UnifiedQueueManager tem métodos de compatibilidade
+    queue_mgr = unified_queue_mgr  # UnifiedQueueManager substitui ambos
     stats_mgr = StatsManager()
     menu = Menu(console)
     

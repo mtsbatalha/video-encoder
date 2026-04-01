@@ -1254,3 +1254,57 @@ class UnifiedQueueManager:
                 if job and job.status in [JobStatus.QUEUED.value, JobStatus.PENDING.value]:
                     return job
             return None
+    
+    # === Métodos de Compatibilidade com JobManager ===
+    
+    def get_running_jobs(self) -> List[Dict[str, Any]]:
+        """
+        Obtém lista de jobs em execução (compatibilidade com JobManager).
+        
+        Returns:
+            Lista de dicionários com informações dos jobs em execução
+        """
+        with self._lock:
+            running = [
+                job.to_dict()
+                for job in self._jobs.values()
+                if job.status == JobStatus.RUNNING.value
+            ]
+            return running
+    
+    def get_pending_jobs(self) -> List[Dict[str, Any]]:
+        """
+        Obtém lista de jobs pendentes (compatibilidade com JobManager).
+        
+        Returns:
+            Lista de dicionários com informações dos jobs pendentes
+        """
+        with self._lock:
+            pending = [
+                job.to_dict()
+                for job in self._jobs.values()
+                if job.status in [JobStatus.PENDING.value, JobStatus.QUEUED.value]
+            ]
+            return pending
+    
+    def list_jobs(self, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Lista todos os jobs (compatibilidade com JobManager).
+        
+        Args:
+            status_filter: Filtro opcional por status
+        
+        Returns:
+            Lista de dicionários com informações dos jobs
+        """
+        with self._lock:
+            if status_filter:
+                jobs = [
+                    job.to_dict()
+                    for job in self._jobs.values()
+                    if job.status == status_filter
+                ]
+            else:
+                jobs = [job.to_dict() for job in self._jobs.values()]
+            
+            return jobs
