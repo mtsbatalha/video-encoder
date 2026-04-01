@@ -513,24 +513,24 @@ def run_watch_mode(
             job = job_mgr.get_job(job_id)
             if job:
                 stats_mgr.record_encode(
-                    profile_id=job.get("profile_id", ""),
-                    profile_name=job.get("profile_name", ""),
+                    profile_id=job.profile.get("id", ""),
+                    profile_name=job.profile_name,
                     success=True,
                     duration_seconds=0,
-                    input_size=job.get("input_size", 0),
-                    output_size=job.get("output_size", 0),
+                    input_size=job.input_size,
+                    output_size=job.output_size,
                 )
         elif status == EncodingStatus.FAILED:
             job = job_mgr.get_job(job_id)
             if job:
                 stats_mgr.record_encode(
-                    profile_id=job.get("profile_id", ""),
-                    profile_name=job.get("profile_name", ""),
+                    profile_id=job.profile.get("id", ""),
+                    profile_name=job.profile_name,
                     success=False,
                     duration_seconds=0,
                     input_size=0,
                     output_size=0,
-                    failure_reason=job.get("error_message", ""),
+                    failure_reason=job.error_message or "",
                 )
 
     encoder.add_progress_callback(on_progress)
@@ -577,30 +577,30 @@ def process_queue_cli(
             job = job_mgr.get_job(job_id)
             if job:
                 stats_mgr.record_encode(
-                    profile_id=job.get("profile_id", ""),
-                    profile_name=job.get("profile_name", ""),
+                    profile_id=job.profile.get("id", ""),
+                    profile_name=job.profile_name,
                     success=True,
                     duration_seconds=0,
-                    input_size=job.get("input_size", 0),
-                    output_size=job.get("output_size", 0),
+                    input_size=job.input_size,
+                    output_size=job.output_size,
                 )
-                source_dir = str(Path(job["input_path"]).parent)
-                output_dir = str(Path(job["output_path"]).parent)
+                source_dir = str(Path(job.input_path).parent)
+                output_dir = str(Path(job.output_path).parent)
                 FileUtils.copy_subtitles_to_output(
-                    source_dir, output_dir, Path(job["input_path"]).stem
+                    source_dir, output_dir, Path(job.input_path).stem
                 )
             queue_mgr.remove_from_queue(job_id)
         elif status == EncodingStatus.FAILED:
             job = job_mgr.get_job(job_id)
             if job:
                 stats_mgr.record_encode(
-                    profile_id=job.get("profile_id", ""),
-                    profile_name=job.get("profile_name", ""),
+                    profile_id=job.profile.get("id", ""),
+                    profile_name=job.profile_name,
                     success=False,
                     duration_seconds=0,
                     input_size=0,
                     output_size=0,
-                    failure_reason=job.get("error_message", ""),
+                    failure_reason=job.error_message or "",
                 )
             queue_mgr.remove_from_queue(job_id)
         elif status == EncodingStatus.CANCELLED:

@@ -327,8 +327,10 @@ class FFmpegWrapper:
                 f"[FFmpegWrapper] get_video_resolution: ffprobe returned code={result.returncode}, stdout='{result.stdout.strip()[:50]}'"
             )
             if result.returncode == 0 and result.stdout.strip():
-                parts = result.stdout.strip().split(",")
-                if len(parts) == 2:
+                parts = [
+                    p.strip() for p in result.stdout.strip().split(",") if p.strip()
+                ]
+                if len(parts) >= 2:
                     width = int(parts[0])
                     height = int(parts[1])
                     print(
