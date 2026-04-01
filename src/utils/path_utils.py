@@ -1,7 +1,13 @@
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+from enum import Enum
+
+# Import tardio para evitar circular dependency
+def _get_file_utils():
+    from .file_utils import FileUtils
+    return FileUtils
 
 
 class PathUtils:
@@ -92,10 +98,24 @@ class PathUtils:
         suffix: Optional[str] = None,
         extension: Optional[str] = None,
         codec: Optional[str] = None,
-        cq: Optional[str] = None
+        cq: Optional[str] = None,
+        handle_conflict: bool = True
     ) -> str:
         """Gera caminho de output baseado no input.
-        Se codec e cq forem fornecidos, gera sufixo automático _{codec}_cq{cq}."""
+        Se codec e cq forem fornecidos, gera sufixo automático _{codec}_cq{cq}.
+        
+        Args:
+            input_path: Caminho do arquivo de entrada
+            output_dir: Diretório de saída
+            suffix: Sufixo personalizado (opcional)
+            extension: Extensão personalizada (opcional)
+            codec: Codec para gerar sufixo automático
+            cq: Valor CQ para gerar sufixo automático
+            handle_conflict: Se True, gera nome único se arquivo existir (default: True)
+        
+        Returns:
+            Caminho completo do arquivo de saída
+        """
         input_path = PathUtils.normalize_path(input_path)
         input_file = Path(input_path)
 
@@ -122,12 +142,9 @@ class PathUtils:
 
         output_path = Path(output_dir) / output_filename
 
-        counter = 1
-        while output_path.exists():
-            output_filename = f"{stem}{suffix or ''}_{counter}{ext}"
-            output_filename = PathUtils.get_safe_filename(output_filename)
-            output_path = Path(output_dir) / output_filename
-            counter += 1
+        # Se handle_conflict estiver habilitado, usa FileUtils para gerar nome único
+        if handle_conflict and output_path.exists():
+            return _get_file_utils().generate_unique_filename(str(output_path))
 
         return str(output_path)
 

@@ -2,8 +2,17 @@ import os
 import hashlib
 import shutil
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
+from enum import Enum
+
+
+class FileConflictStrategy(Enum):
+    """Estratégias para lidar com conflitos de arquivos existentes."""
+    OVERWRITE = "overwrite"      # Substituir arquivo existente
+    RENAME = "rename"            # Adicionar numeração (_1, _2, etc.)
+    SKIP = "skip"                # Pular arquivo
+    ASK = "ask"                  # Perguntar ao usuário
 
 
 class FileUtils:
@@ -347,3 +356,209 @@ class FileUtils:
             return int(float(bitrate_str) * multiplier)
         except ValueError:
             return 5_000_000  # Fallback: 5M
+    
+    @staticmethod
+    def file_exists(path: str) -> bool:
+        """Verifica se arquivo existe."""
+        return Path(path).exists()
+    
+    @staticmethod
+    def resolve_file_conflict(
+        output_path: str,
+        interactive: bool = False,
+        console=None
+    ) -> Tuple[FileConflictStrategy, str]:
+        """
+        Resolve conflito de arquivo existente.
+        
+        Args:
+            output_path: Caminho do arquivo de saída
+            interactive: Se True, pergunta ao usuário (modo interativo)
+            console: Console Rich para output (apenas modo interativo)
+        
+        Returns:
+            Tuple com (estratégia, caminho_final)
+            - Se OVERWRITE: caminho original
+            - Se RENAME: caminho com numeração
+            - Se SKIP: caminho original
+        """
+        path = Path(output_path)
+        
+        # Se arquivo não existe, sem conflito
+        if not path.exists():
+            return (FileConflictStrategy.OVERWRITE, output_path)
+        
+        # Modo não-interativo: apenas renomeia automaticamente
+        if not interactive:
+            new_path = FileUtils.generate_unique_filename(output_path)
+            return (FileConflictStrategy.RENAME, new_path)
+        
+        # Modo interativo: pergunta ao usuário
+        if console:
+            console.print(f"\n[yellow]⚠️  Arquivo já existe:[/yellow] {output_path}")
+            console.print("[cyan]O que deseja fazer?[/cyan]")
+        
+        # Usar input do usuário
+        try:
+            from rich.prompt import Confirm, Prompt
+            
+            # Opção 1: Substituir
+            if Confirm.ask("\nDeseja [bold red]substituir[/bold red] o arquivo existente?", default=False):
+                return (FileConflictStrategy.OVERWRITE, output_path)
+            
+            # Opção 2: Renomear com numeração
+            if Confirm.ask("Deseja [bold green]criar uma cópia numerada[/bold green] (ex: arquivo_1.mkv)?", default=True):
+                new_path = FileUtils.generate_unique_filename(output_path)
+                return (FileConflictStrategy.RENAME, new_path)
+            
+            # Opção 3: Pular
+            return (FileConflictStrategy.SKIP, output_path)
+            
+        except Exception:
+            # Fallback: renomeia automaticamente em caso de erro
+            new_path = FileUtils.generate_unique_filename(output_path)
+            return (FileConflictStrategy.RENAME, new_path)
+    
+    @staticmethod
+    def generate_unique_filename(path: str) -> str:
+        """
+        Gera nome único para arquivo adicionando numeração.
+        
+        Exemplos:
+            filme.mkv -> filme_1.mkv
+            filme_1.mkv -> filme_2.mkv
+            filme_cq20.mkv -> filme_cq20_1.mkv
+        
+        Args:
+            path: Caminho original do arquivo
+        
+        Returns:
+            Novo caminho com numeração única
+        """
+        path_obj = Path(path)
+        directory = path_obj.parent
+        stem = path_obj.stem
+        suffix = path_obj.suffix
+        
+        # Tenta encontrar padrão de numeração existente no stem
+        # Ex: filme_1 -> filme_2, filme_cq20_1 -> filme_cq20_2
+        import re
+        match = re.match(r'^(.+?)_(\d+)$', stem)
+        
+        if match:
+            base_stem = match.group(1)
+            current_num = int(match.group(2))
+            # Usa o próximo número
+            new_stem = f"{base_stem}_{current_num + 1}"
+        else:
+            # Começa do 1
+            base_stem = stem
+            new_stem = f"{stem}_1"
+        
+        # Garante que o novo nome não existe
+        counter = 1
+        while True:
+            new_filename = f"{new_stem}{suffix}"
+            new_path = directory / new_filename
+            if not new_path.exists():
+                return str(new_path)
+            
+            # Incrementa se ainda existe
+            if match:
+                new_stem = f"{base_stem}_{current_num + counter + 1}"
+            else:
+                new_stem = f"{stem}_{counter + 1}"
+            counter += 1
+            
+            # Segurança: limite de 9999 tentativas
+            if counter > 9999:
+                import uuid
+                new_stem = f"{stem}_{uuid.uuid4().hex[:8]}"
+                return str(directory / f"{new_stem}{suffix}")
+    
+    @staticmethod
+    def validate_output_folder_name(
+        folder_path: str,
+        expected_name_pattern: Optional[str] = None,
+        codec: Optional[str] = None,
+        quality: Optional[str] = None
+    ) -> Tuple[bool, str, Optional[str]]:
+        """
+        Valida se o nome da pasta de saída segue o padrão esperado.
+        
+        Args:
+            folder_path: Caminho da pasta a validar
+            expected_name_pattern: Padrão esperado (opcional)
+            codec: Codec esperado no nome da pasta
+            quality: Qualidade/resolução esperada no nome da pasta
+        
+        Returns:
+            Tuple com (é_válido, mensagem, nome_sugerido)
+        """
+        path = Path(folder_path)
+        folder_name = path.name
+        
+        if not path.exists():
+            # Pasta não existe ainda, é válido
+            return (True, "Pasta será criada", None)
+        
+        issues = []
+        suggestions = []
+        
+        # Verifica se codec está no nome da pasta
+        if codec:
+            codec_short = codec.replace('_nvenc', '').replace('_amf', '').replace('_qsv', '')
+            if codec_short.lower() not in folder_name.lower():
+                issues.append(f"Codec '{codec_short}' não está no nome da pasta")
+                suggestions.append(codec_short)
+        
+        # Verifica se qualidade está no nome da pasta
+        if quality and str(quality) not in str(folder_name):
+            issues.append(f"Qualidade '{quality}' não está no nome da pasta")
+            suggestions.append(str(quality))
+        
+        if issues:
+            # Gera nome sugerido
+            base_name = path.parent.name if path.parent != path.anchor else "encoded"
+            suggested_parts = [base_name] + suggestions
+            suggested_name = "_".join(suggested_parts)
+            return (False, f"Pasta não segue padrão: {', '.join(issues)}", suggested_name)
+        
+        return (True, "Nome da pasta está correto", None)
+    
+    @staticmethod
+    def generate_output_folder_name(
+        base_name: str,
+        codec: str,
+        quality: Optional[str] = None,
+        cq: Optional[str] = None
+    ) -> str:
+        """
+        Gera nome de pasta de saída com codec e qualidade.
+        
+        Args:
+            base_name: Nome base da pasta
+            codec: Codec de vídeo (hevc, h264, av1)
+            quality: Qualidade/resolução (480, 720, 1080, etc.)
+            cq: Valor de qualidade constante
+        
+        Returns:
+            Nome da pasta formatado
+        """
+        # Extrai nome curto do codec
+        codec_short = codec.replace('_nvenc', '').replace('_amf', '').replace('_qsv', '')
+        
+        parts = [base_name]
+        
+        # Adiciona qualidade se disponível
+        if quality:
+            parts.append(str(quality))
+        
+        # Adiciona codec
+        parts.append(codec_short)
+        
+        # Adiciona CQ se disponível
+        if cq:
+            parts.append(f"cq{cq}")
+        
+        return "_".join(parts)

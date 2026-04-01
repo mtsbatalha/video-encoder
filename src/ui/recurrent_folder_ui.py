@@ -246,10 +246,25 @@ class RecurrentFolderUI:
             default=True
         )
         
-        skip_existing = self.menu.ask_confirm(
-            "Pular arquivos já existentes no output?",
-            default=True
+        self.menu.console.print("\n[cyan]Como lidar com arquivos já existentes no output?[/cyan]")
+        self.menu.console.print("  [1] Pular arquivo (não fazer nada)")
+        self.menu.console.print("  [2] Criar cópia numerada automaticamente (ex: arquivo_1.mkv)")
+        self.menu.console.print("  [3] Substituir arquivo existente (PERIGO: perde o arquivo original)")
+        
+        conflict_choice = self.menu.ask_int(
+            "Escolha uma opção",
+            default=2
         )
+        
+        if conflict_choice == 1:
+            skip_existing = True
+            rename_existing = False
+        elif conflict_choice == 2:
+            skip_existing = False
+            rename_existing = True
+        else:  # choice == 3
+            skip_existing = False
+            rename_existing = False  # Vai substituir
         
         delete_source = self.menu.ask_confirm(
             "Excluir arquivo de origem após conversão?",
@@ -271,6 +286,7 @@ class RecurrentFolderUI:
             "options": {
                 "preserve_subdirectories": preserve_subdirs,
                 "skip_existing_output": skip_existing,
+                "rename_existing_output": rename_existing,  # Nova opção: renomeia automaticamente
                 "delete_source_after_encode": delete_source,
                 "copy_subtitles": copy_subtitles,
                 "supported_extensions": [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpeg", ".mpg"],
@@ -280,6 +296,15 @@ class RecurrentFolderUI:
         
         # Exibe resumo
         self.menu.console.print()
+        
+        # Determina ação para arquivos existentes
+        if skip_existing:
+            existing_action = "Pular"
+        elif rename_existing:
+            existing_action = "Renomear automaticamente"
+        else:
+            existing_action = "Substituir"
+        
         self.menu.console.print(Panel(
             f"[bold]Confirmação:[/bold]\n\n"
             f"Nome: {nome}\n"
@@ -287,7 +312,7 @@ class RecurrentFolderUI:
             f"Saída: {saida}\n"
             f"Perfil: {profile_id}\n"
             f"Preservar subdiretórios: {'Sim' if preserve_subdirs else 'Não'}\n"
-            f"Pular existentes: {'Sim' if skip_existing else 'Não'}\n"
+            f"Ação para existentes: {existing_action}\n"
             f"Excluir origem: {'Sim' if delete_source else 'Não'}\n"
             f"Copiar legendas: {'Sim' if copy_subtitles else 'Não'}",
             border_style="cyan",

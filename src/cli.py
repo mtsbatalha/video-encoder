@@ -5,6 +5,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.prompt import Confirm
 
 from .managers.config_manager import ConfigManager
 from .managers.profile_manager import ProfileManager
@@ -16,7 +17,7 @@ from .core.hw_monitor import HardwareMonitor
 from .core.hw_detector import HardwareDetector
 from .core.encoder_engine import EncoderEngine, EncodingStatus
 from .utils.path_utils import PathUtils
-from .utils.file_utils import FileUtils
+from .utils.file_utils import FileUtils, FileConflictStrategy
 from .ui.menu import Menu
 from .ui.progress import ProgressDisplay
 from .ui.queue_menu import show_queue_submenu
@@ -521,13 +522,32 @@ def run_single_file(args, config: ConfigManager, profile_mgr: ProfileManager, jo
     codec = profile.get('codec', 'hevc_nvenc')
     cq = profile.get('cq')
 
+    # Gerar caminho de output inicial
     if args.output_file:
         output_path = PathUtils.normalize_path(args.output_file)
     elif args.output:
         ensure_directory(args.output)
-        output_path = PathUtils.generate_output_path(input_path, args.output, codec=codec, cq=cq)
+        output_path = PathUtils.generate_output_path(input_path, args.output, codec=codec, cq=cq, handle_conflict=False)
     else:
-        output_path = PathUtils.generate_output_path(input_path, str(Path(input_path).parent), codec=codec, cq=cq)
+        output_path = PathUtils.generate_output_path(input_path, str(Path(input_path).parent), codec=codec, cq=cq, handle_conflict=False)
+    
+    # Verificar conflito de arquivo existente (modo interativo)
+    if Path(output_path).exists():
+        console.print(f"\n[yellow]⚠️  Arquivo já existe:[/yellow] {output_path}")
+        console.print("[cyan]O que deseja fazer?[/cyan]")
+        
+        # Opção 1: Substituir
+        if Confirm.ask("\nDeseja [bold red]substituir[/bold red] o arquivo existente?", default=False):
+            strategy = FileConflictStrategy.OVERWRITE
+        # Opção 2: Renomear com numeração
+        elif Confirm.ask("Deseja [bold green]criar uma cópia numerada[/bold green] (ex: arquivo_1.mkv)?", default=True):
+            strategy = FileConflictStrategy.RENAME
+            output_path = FileUtils.generate_unique_filename(output_path)
+            console.print(f"[cyan]Novo caminho:[/cyan] {output_path}")
+        # Opção 3: Pular
+        else:
+            console.print("[yellow]Arquivo pulado.[/yellow]")
+            return
     
     job_id = job_mgr.create_job(
         input_path=input_path,
@@ -656,18 +676,63 @@ def run_folder_mode(args, config: ConfigManager, profile_mgr: ProfileManager, jo
     codec = profile.get('codec', 'hevc_nvenc')
     cq = profile.get('cq')
 
+    # Verificar e sugerir nome da pasta de saída
+    output_path_obj = Path(output_dir)
+    is_valid, msg, suggested_name = FileUtils.validate_output_folder_name(
+        str(output_path_obj),
+        codec=codec,
+        quality=profile.get('resolution')
+    )
+    if not is_valid and suggested_name:
+        console.print(f"[yellow][!][/yellow] {msg}")
+        if Confirm.ask(f"Deseja usar o nome sugerido: [cyan]{suggested_name}[/cyan]?", default=True):
+            output_dir = str(output_path_obj.parent / suggested_name)
+            ensure_directory(output_dir)
+
     for video_file in video_files:
         rel_path = Path(video_file).relative_to(folder_path)
         rel_parent = rel_path.parent
 
         if str(rel_parent) != '.':
-            folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
+            # Gerar nome da pasta com codec e qualidade
+            base_folder_name = PathUtils.generate_output_dir_name(str(rel_parent), codec, cq)
+            
+            # Validar nome da pasta gerada
+            temp_folder_path = Path(output_dir) / base_folder_name
+            is_valid, msg, suggested = FileUtils.validate_output_folder_name(
+                str(temp_folder_path),
+                codec=codec,
+                quality=profile.get('resolution')
+            )
+            if suggested and not is_valid:
+                folder_name = suggested
+            else:
+                folder_name = base_folder_name
+            
             video_output_dir = str(Path(output_dir) / folder_name)
         else:
             video_output_dir = output_dir
 
         ensure_directory(video_output_dir)
-        output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq)
+        # Gerar caminho do arquivo sem lidar com conflito automaticamente
+        output_path = PathUtils.generate_output_path(video_file, video_output_dir, codec=codec, cq=cq, handle_conflict=False)
+        
+        # Verificar conflito de arquivo existente
+        if Path(output_path).exists():
+            console.print(f"\n[yellow]⚠️  Arquivo já existe:[/yellow] {output_path}")
+            console.print("[cyan]O que deseja fazer?[/cyan]")
+            
+            # Opção 1: Substituir
+            if Confirm.ask("\nDeseja [bold red]substituir[/bold red] o arquivo existente?", default=False):
+                pass  # Mantém output_path original
+            # Opção 2: Renomear com numeração
+            elif Confirm.ask("Deseja [bold green]criar uma cópia numerada[/bold green] (ex: arquivo_1.mkv)?", default=True):
+                output_path = FileUtils.generate_unique_filename(output_path)
+                console.print(f"[cyan]Novo caminho:[/cyan] {output_path}")
+            # Opção 3: Pular este arquivo
+            else:
+                console.print(f"[yellow]Arquivo pulado:[/yellow] {video_file}")
+                continue
 
         job_id = job_mgr.create_job(
             input_path=video_file,

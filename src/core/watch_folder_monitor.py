@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 import os
 
-from ..utils.file_utils import FileUtils
+from ..utils.file_utils import FileUtils, FileConflictStrategy
 from ..managers.queue_manager import QueueManager, QueuePriority
 from ..managers.job_manager import JobManager
 from ..managers.profile_manager import ProfileManager
@@ -30,6 +30,7 @@ class WatchFolderMonitor:
         self.interval = config.get('interval', 10)  # segundos entre verificações
         self.min_size = config.get('min_size', 10 * 1024 * 1024)  # 10MB em bytes
         self.skip_existing_output = config.get('skip_existing_output', True)
+        self.rename_existing_output = config.get('rename_existing_output', False)  # Renomeia automaticamente
         self.extensions = config.get('extensions', ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm'])
         self.debounce_time = config.get('debounce_time', 5)  # segundos para debounce
         self.enabled = config.get('enabled', True)
@@ -209,6 +210,18 @@ class WatchFolderMonitor:
             if not output_path:
                 self.logger.error(f"Falha ao gerar caminho de saída para: {path}")
                 return
+            
+            # Verifica se output já existe e aplica ação configurada
+            if output_path.exists():
+                if self.skip_existing_output:
+                    # Se configurado para pular, ignora este arquivo
+                    self.logger.info(f"Output já existe, pulando: {output_path}")
+                    return
+                elif self.rename_existing_output:
+                    # Se configurado para renomear, gera nome único com numeração
+                    output_path = Path(FileUtils.generate_unique_filename(str(output_path)))
+                    self.logger.info(f"Output já existe, usando nome alternativo: {output_path}")
+                # else: vai substituir o arquivo existente (não faz nada aqui)
                 
             # Garante que diretório de saída existe
             output_path.parent.mkdir(parents=True, exist_ok=True)
