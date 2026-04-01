@@ -191,7 +191,11 @@ python src/utils/queue_migration.py
 ### 1. Iniciar Aplicação
 
 ```bash
+# Windows/Mac
 python src/cli.py --interactive
+
+# Linux (use python3)
+python3 src/cli.py --interactive
 ```
 
 ### 2. Acessar Menu de Fila
