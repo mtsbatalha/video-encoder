@@ -662,8 +662,9 @@ class Menu:
         Returns:
             Índice da ação escolhida:
             0 - Confirmar e adicionar à fila
-            1 - Editar perfis
-            2 - Cancelar
+            1 - Reorganizar perfis
+            2 - Editar perfis individualmente
+            3 - Cancelar
         """
         from rich.panel import Panel
         from rich.text import Text
@@ -722,8 +723,9 @@ class Menu:
         # Menu de ações
         options = [
             {"description": "✅ Confirmar e adicionar jobs à fila", "shortcut": "1"},
-            {"description": "✏️ Editar perfis", "shortcut": "2"},
-            {"description": "❌ Cancelar", "shortcut": "3"}
+            {"description": "🔄 Reorganizar perfis", "shortcut": "2"},
+            {"description": "✏️ Editar perfis individualmente", "shortcut": "3"},
+            {"description": "❌ Cancelar", "shortcut": "4"}
         ]
         
         choice = self.show_menu("Ações", options)

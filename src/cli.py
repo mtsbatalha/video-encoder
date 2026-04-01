@@ -837,7 +837,7 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
                 
                 break
             
-            elif preview_action == 1:  # Editar perfis
+            elif preview_action == 1:  # Reorganizar perfis
                 # Voltar para seleção de perfis
                 selected_profile_ids = menu.show_multi_profile_selection(
                     profile_mgr.list_profiles(),
@@ -858,6 +858,37 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
                         'naming_convention': NamingConvention.PROFILE_SUFFIX.value
                     }
                 )
+            
+            elif preview_action == 2:  # Editar perfis individualmente
+                # Editar perfis individualmente
+                edited_profiles = multi_mgr.edit_individual_profiles_interactive(
+                    selected_profile_ids,
+                    profile_mgr
+                )
+                
+                # Atualizar os IDs dos perfis selecionados com os perfis editados
+                edited_profile_ids = []
+                for edited_profile in edited_profiles:
+                    # Atualizar o perfil no gerenciador
+                    profile_id = edited_profile['id']
+                    profile_mgr.update_profile(profile_id, **edited_profile)
+                    edited_profile_ids.append(profile_id)
+                
+                # Regenerar plano com os perfis editados
+                plan = multi_mgr.generate_conversion_plan(
+                    input_files=video_files,
+                    profile_ids=edited_profile_ids,
+                    output_folder=output_folder,
+                    options={
+                        'preserve_structure': True,
+                        'naming_convention': NamingConvention.PROFILE_SUFFIX.value
+                    }
+                )
+            
+            elif preview_action == 3:  # Cancelar
+                menu.print_warning("Operação cancelada")
+                input("\nPressione Enter para continuar...")
+                break
             
             else:  # Cancelar
                 menu.print_warning("Operação cancelada")

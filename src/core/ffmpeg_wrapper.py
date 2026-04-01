@@ -168,7 +168,8 @@ class FFmpegWrapper:
         subtitle_burn: bool = False,
         plex_compatible: bool = True,
         conversion_speed: Optional[str] = None,
-        hardware_category: Optional[str] = None
+        hardware_category: Optional[str] = None,
+        cuda_accel: bool = True
     ) -> List[str]:
         """Constrói comando FFmpeg para encoding.
         
@@ -188,10 +189,18 @@ class FFmpegWrapper:
             plex_compatible: Criar arquivo compatível com Plex
             conversion_speed: Velocidade de conversão (very_fast, fast, medium, slow)
             hardware_category: Categoria de hardware (nvidia_gpu, amd_gpu, etc.)
+            cuda_accel: Habilitar aceleração CUDA para codecs NVIDIA (default: True)
         """
         
         # ✅ FIX: Usa stderr padrão com -stats para output de progresso
-        cmd = [self.ffmpeg, '-y', '-stats', '-i', input_path]
+        # ✅ CUDA ACCEL: Adiciona flags de aceleração hardware para codecs NVIDIA
+        cmd = [self.ffmpeg, '-y', '-stats']
+        
+        # Adicionar aceleração CUDA para codecs NVIDIA
+        if cuda_accel and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
+            cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
+        
+        cmd.extend(['-i', input_path])
         
         video_params = self.CODEC_MAP.get(codec, self.CODEC_MAP['hevc_nvenc'])
         

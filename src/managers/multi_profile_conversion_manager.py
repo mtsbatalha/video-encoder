@@ -461,3 +461,44 @@ class MultiProfileConversionManager:
         # TODO: Implementar usando FFmpegWrapper.get_duration()
         # Por enquanto, retorna None para usar fallback
         return None
+
+    def edit_individual_profiles_interactive(
+        self,
+        profile_ids: List[str],
+        profile_mgr: ProfileManager
+    ) -> List[Dict[str, Any]]:
+        """
+        Permite edição individual interativa de perfis selecionados.
+        
+        Args:
+            profile_ids: Lista de IDs de perfis para editar
+            profile_mgr: Gerenciador de perfis
+            
+        Returns:
+            Lista de perfis modificados
+        """
+        from src.ui.menu import Menu
+        from rich.console import Console
+        
+        console = Console()
+        menu = Menu(console)
+        
+        edited_profiles = []
+        
+        for profile_id in profile_ids:
+            profile = profile_mgr.get_profile(profile_id)
+            if profile:
+                # Exibir informações do perfil atual
+                console.print(f"\n[bold cyan]Editando perfil:[/bold cyan] {profile.get('name', 'N/A')}")
+                console.print(f"[dim]ID:[/dim] {profile_id}")
+                
+                # Perguntar se deseja editar este perfil
+                if menu.ask_confirm("Deseja editar este perfil?", default=True):
+                    # Chamar o editor avançado de perfil
+                    edited_profile = menu.show_advanced_profile_editor(profile, profile_mgr)
+                    edited_profiles.append(edited_profile)
+                else:
+                    # Manter o perfil original
+                    edited_profiles.append(profile)
+        
+        return edited_profiles
