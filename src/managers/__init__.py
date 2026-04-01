@@ -8,6 +8,14 @@
 # from .recurrent_history_manager import RecurrentHistoryManager
 # from .multi_profile_conversion_manager import MultiProfileConversionManager, ConversionPlan, PlannedJob, NamingConvention
 
+from .unified_queue_manager import (
+    UnifiedQueueManager,
+    JobStatus,
+    QueuePriority,
+    QueueJob,
+    ResourceUsage
+)
+
 __all__ = [
     'ProfileManager',
     'JobManager',
@@ -19,5 +27,11 @@ __all__ = [
     'MultiProfileConversionManager',
     'ConversionPlan',
     'PlannedJob',
-    'NamingConvention'
+    'NamingConvention',
+    # New unified queue manager
+    'UnifiedQueueManager',
+    'JobStatus',
+    'QueuePriority',
+    'QueueJob',
+    'ResourceUsage'
 ]
