@@ -196,9 +196,13 @@ class FFmpegWrapper:
         # ✅ CUDA ACCEL: Adiciona flags de aceleração hardware para codecs NVIDIA
         cmd = [self.ffmpeg, '-y', '-stats']
         
-        # Adicionar aceleração CUDA para codecs NVIDIA
+        # ✅ FIX: Adicionar aceleração CUDA para codecs NVIDIA
+        # Nota: Não usar -hwaccel_output_format cuda se HDR to SDR ativo (filtros incompatíveis)
         if cuda_accel and codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc']:
-            cmd.extend(['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda'])
+            cmd.extend(['-hwaccel', 'cuda'])
+            # Só usar output format cuda se não tiver conversão HDR (que precisa filtros CPU)
+            if not hdr_to_sdr:
+                cmd.extend(['-hwaccel_output_format', 'cuda'])
         
         cmd.extend(['-i', input_path])
         
@@ -210,11 +214,25 @@ class FFmpegWrapper:
         
         filter_complex = []
         
+        # ✅ FIX: Determinar se usamos filtros CUDA ou CPU
+        # Nota: Não usar filtros CUDA se HDR to SDR ativo (incompatível com filtros tonemap)
+        use_cuda_filters = (cuda_accel and
+                           codec in ['hevc_nvenc', 'h264_nvenc', 'av1_nvenc'] and
+                           not hdr_to_sdr)
+        
         if deinterlace:
-            filter_complex.append('bwdif=mode=send:par=1')
+            # ✅ FIX: Usar yadif_cuda quando CUDA ativo, bwdif caso contrário
+            if use_cuda_filters:
+                filter_complex.append('yadif_cuda=mode=send_frame:parity=auto')
+            else:
+                filter_complex.append('bwdif=mode=send:par=1')
         
         if resolution:
-            filter_complex.append(f'scale=-2:{resolution}')
+            # ✅ FIX: Usar scale_cuda quando CUDA ativo para manter processamento na GPU
+            if use_cuda_filters:
+                filter_complex.append(f'scale_cuda=-2:{resolution}')
+            else:
+                filter_complex.append(f'scale=-2:{resolution}')
         
         if hdr_to_sdr:
             filter_complex.append('zscale=t=linear:npl=100')
