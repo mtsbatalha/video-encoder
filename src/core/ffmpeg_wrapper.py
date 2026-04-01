@@ -394,12 +394,6 @@ class FFmpegWrapper:
                                 line = line.strip()
                                 if line:
                                     output_lines.append(line)
-                                    # [DEBUG PATCH] Log TODAS as linhas recebidas
-                                    if not hasattr(callback, '_debug_line_count'):
-                                        callback._debug_line_count = 0
-                                    callback._debug_line_count += 1
-                                    if callback._debug_line_count <= 5 or callback._debug_line_count % 20 == 0:
-                                        print(f"\n[FFMPEG LINE #{callback._debug_line_count}] {line[:150]}")
                                     if callback:
                                         # 🔍 DEBUG: Log apenas se linha contém indicadores de progresso
                                         if any(indicator in line.lower() for indicator in ['fps=', 'speed=', 'time=', 'frame=']):
