@@ -962,19 +962,13 @@ def show_queue_submenu(menu: Menu, queue_mgr: QueueManager, job_mgr: JobManager)
     """
     console = Console()
     
-    # Verificar se estamos usando o UnifiedQueueManager
+    # Sempre usar nova UI v2 com UnifiedQueueManager
     try:
-        from ..managers.unified_queue_manager import UnifiedQueueManager
-        if isinstance(queue_mgr, UnifiedQueueManager):
-            # Usar nova UI v2
-            from .queue_menu_v2 import QueueMenuUIV2
-            ui = QueueMenuUIV2(console, queue_mgr)
-            ui.show_submenu()
-            return
-    except (ImportError, TypeError):
-        pass
-    
-    # Fallback para UI antiga
-    console.print("[yellow][AVISO] Usando UI antiga de fila. Considere migrar para UnifiedQueueManager.[/yellow]")
-    ui = QueueMenuUI(console, queue_mgr, job_mgr)
-    ui.show_submenu()
+        from .queue_menu_v2 import QueueMenuUIV2
+        ui = QueueMenuUIV2(console, queue_mgr)
+        ui.show_submenu()
+    except Exception as e:
+        console.print(f"[red]Erro ao carregar nova UI: {e}[/red]")
+        console.print("[yellow]Tentando UI antiga...[/yellow]")
+        ui = QueueMenuUI(console, queue_mgr, job_mgr)
+        ui.show_submenu()
