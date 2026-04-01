@@ -270,154 +270,168 @@ class EncoderEngine:
         """Executa job de encoding."""
         from pathlib import Path
 
-        print(
-            f"[ENCODER _execute_job] START - job_id={job.id[:8] if job.id else 'NO_ID'}, input={job.input_path}"
-        )
-
-        input_file = Path(job.input_path)
-        output_file = Path(job.output_path)
-
-        if not input_file.exists():
-            error_msg = f"Arquivo de entrada não existe: {job.input_path}"
-            return (False, error_msg)
-
-        print(f"[ENCODER _execute_job] Input file check passed: {input_file.exists()}")
-
-        if not input_file.is_file():
-            error_msg = f"Caminho de entrada não é um arquivo: {job.input_path}"
-            return (False, error_msg)
-
         try:
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            error_msg = f"Erro ao criar diretório de saída: {e}"
-            return (False, error_msg)
-
-        print(f"[ENCODER _execute_job] Output dir created, about to get media info")
-
-        profile = job.profile
-        media_info = self.ffmpeg.get_media_info(job.input_path)
-        print(f"[ENCODER _execute_job] Media info retrieved, duration={duration}")
-        duration = self.ffmpeg.get_duration(media_info)
-        video_streams = self.ffmpeg.get_video_streams(media_info)
-
-        self.realtime_monitor.start(
-            description=f"Encoding: {job.input_path}",
-            total_duration=duration,
-            input_file=job.input_path,
-            output_file=job.output_path,
-            input_media_info=media_info,
-            profile=profile,
-        )
-
-        print(f"[ENCODER _execute_job] Realtime monitor started")
-
-        parser = FFmpegProgressParser(monitor=self.realtime_monitor)
-        parser.set_duration(duration)
-
-        # Agora que o monitor está iniciado, adicionamos logs de debug
-        self.realtime_monitor.add_debug_log(f"Job iniciado: {job.id[:8]}")
-        self.realtime_monitor.add_debug_log(f"Input: {job.input_path}")
-        self.realtime_monitor.add_debug_log(f"Output: {job.output_path}")
-        self.realtime_monitor.add_debug_log(
-            f"Profile: {profile.get('name', 'Unknown')}, Codec: {profile.get('codec', 'Unknown')}"
-        )
-        self.realtime_monitor.add_debug_log(
-            f"Duration: {duration}s, Video streams: {len(video_streams)}"
-        )
-        command = self.ffmpeg.build_encoding_command(
-            input_path=job.input_path,
-            output_path=job.output_path,
-            codec=profile.get("codec", "hevc_nvenc"),
-            cq=profile.get("cq"),
-            bitrate=profile.get("bitrate"),
-            resolution=profile.get("resolution"),
-            preset=profile.get("preset", "p5"),
-            two_pass=profile.get("two_pass", False),
-            hdr_to_sdr=profile.get("hdr_to_sdr", False),
-            deinterlace=profile.get("deinterlace", False),
-            audio_tracks=profile.get("audio_tracks"),
-            subtitle_burn=profile.get("subtitle_burn", False),
-            plex_compatible=profile.get("plex_compatible", True),
-        )
-
-        print(
-            f"[ENCODER _execute_job] Encoding command built: {command[:100] if command else 'NONE'}..."
-        )
-
-        def progress_callback(output: str):
-            stats = parser.parse_line(output)
-
-            if "fps" in stats:
-                self.realtime_monitor.update_encoding_stats(fps=stats["fps"])
-            if "speed" in stats:
-                self.realtime_monitor.update_encoding_stats(speed=stats["speed"])
-            if "bitrate" in stats:
-                self.realtime_monitor.update_encoding_stats(bitrate=stats["bitrate"])
-            if "current_time" in stats:
-                self.realtime_monitor.update_progress(
-                    progress=stats.get("progress", 0),
-                    current_time=stats["current_time"],
-                )
-
-            hw_stats = self.hw_monitor.get_stats()
-            self.realtime_monitor.update_hw_stats(
-                {
-                    "gpu_util": hw_stats.gpu_util,
-                    "gpu_temperature": hw_stats.gpu_temperature,
-                    "gpu_memory_used": hw_stats.gpu_memory_used,
-                    "gpu_memory_total": hw_stats.gpu_memory_total,
-                    "cpu_util": hw_stats.cpu_util,
-                }
+            print(
+                f"[ENCODER _execute_job] START - job_id={job.id[:8] if job.id else 'NO_ID'}, input={job.input_path}"
             )
 
-            if "progress" in stats:
-                job.progress = stats["progress"]
-                for callback in self._progress_callbacks:
-                    callback(job.id, stats["progress"])
+            input_file = Path(job.input_path)
+            output_file = Path(job.output_path)
 
-            if stats:
-                for callback in self._encoding_stats_callbacks:
-                    callback(job.id, stats)
+            if not input_file.exists():
+                error_msg = f"Arquivo de entrada não existe: {job.input_path}"
+                print(f"[ENCODER _execute_job] Input file does not exist")
+                return (False, error_msg)
 
-            # Atualizar o PID do FFMPEG no job correspondente no UnifiedQueueManager
-            if hasattr(self.ffmpeg, "_process") and self.ffmpeg._process:
-                ffmpeg_pid = self.ffmpeg._process.pid
-                # Procurar o job correspondente no UnifiedQueueManager e atualizar o PID
-                try:
-                    # Tenta obter o UnifiedQueueManager se estiver disponível
-                    if hasattr(self, "_queue_manager"):
-                        queue_job = self._queue_manager.get_job(job.id)
-                        if queue_job and hasattr(queue_job, "ffmpeg_pid"):
-                            queue_job.ffmpeg_pid = ffmpeg_pid
-                            # Salvar as alterações
-                            self._queue_manager.save()
-                except:
-                    # Se não for possível atualizar o PID no queue manager, registrar aviso
-                    print(
-                        f"Aviso: Não foi possível atualizar o PID do FFMPEG no job {job.id}"
+            if not input_file.is_file():
+                error_msg = f"Caminho de entrada não é um arquivo: {job.input_path}"
+                return (False, error_msg)
+
+            print(
+                f"[ENCODER _execute_job] Input file check passed: {input_file.exists()}"
+            )
+
+            try:
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                error_msg = f"Erro ao criar diretório de saída: {e}"
+                return (False, error_msg)
+
+            print(f"[ENCODER _execute_job] Output dir created, about to get media info")
+
+            profile = job.profile
+            print(f"[ENCODER _execute_job] Getting media info for: {job.input_path}")
+
+            try:
+                media_info = self.ffmpeg.get_media_info(job.input_path)
+                print(
+                    f"[ENCODER _execute_job] Media info retrieved, getting duration..."
+                )
+                duration = self.ffmpeg.get_duration(media_info)
+                video_streams = self.ffmpeg.get_video_streams(media_info)
+            except Exception as e:
+                print(f"[ENCODER _execute_job] ERROR getting media info: {e}")
+                return (False, f"Erro ao obter info do mídia: {e}")
+
+            print(f"[ENCODER _execute_job] Media info retrieved, duration={duration}")
+
+            self.realtime_monitor.start(
+                description=f"Encoding: {job.input_path}",
+                total_duration=duration,
+                input_file=job.input_path,
+                output_file=job.output_path,
+                input_media_info=media_info,
+                profile=profile,
+            )
+
+            print(f"[ENCODER _execute_job] Realtime monitor started")
+
+            parser = FFmpegProgressParser(monitor=self.realtime_monitor)
+            parser.set_duration(duration)
+
+            self.realtime_monitor.add_debug_log(f"Job iniciado: {job.id[:8]}")
+            self.realtime_monitor.add_debug_log(f"Input: {job.input_path}")
+            self.realtime_monitor.add_debug_log(f"Output: {job.output_path}")
+            self.realtime_monitor.add_debug_log(
+                f"Profile: {profile.get('name', 'Unknown')}, Codec: {profile.get('codec', 'Unknown')}"
+            )
+            self.realtime_monitor.add_debug_log(
+                f"Duration: {duration}s, Video streams: {len(video_streams)}"
+            )
+            command = self.ffmpeg.build_encoding_command(
+                input_path=job.input_path,
+                output_path=job.output_path,
+                codec=profile.get("codec", "hevc_nvenc"),
+                cq=profile.get("cq"),
+                bitrate=profile.get("bitrate"),
+                resolution=profile.get("resolution"),
+                preset=profile.get("preset", "p5"),
+                two_pass=profile.get("two_pass", False),
+                hdr_to_sdr=profile.get("hdr_to_sdr", False),
+                deinterlace=profile.get("deinterlace", False),
+                audio_tracks=profile.get("audio_tracks"),
+                subtitle_burn=profile.get("subtitle_burn", False),
+                plex_compatible=profile.get("plex_compatible", True),
+            )
+
+            print(
+                f"[ENCODER _execute_job] Encoding command built: {command[:100] if command else 'NONE'}..."
+            )
+
+            def progress_callback(output: str):
+                stats = parser.parse_line(output)
+
+                if "fps" in stats:
+                    self.realtime_monitor.update_encoding_stats(fps=stats["fps"])
+                if "speed" in stats:
+                    self.realtime_monitor.update_encoding_stats(speed=stats["speed"])
+                if "bitrate" in stats:
+                    self.realtime_monitor.update_encoding_stats(
+                        bitrate=stats["bitrate"]
+                    )
+                if "current_time" in stats:
+                    self.realtime_monitor.update_progress(
+                        progress=stats.get("progress", 0),
+                        current_time=stats["current_time"],
                     )
 
-        self.realtime_monitor.add_debug_log("Executando encoding...")
-        print(f"[ENCODER _execute_job] About to call ffmpeg.run_encoding()")
-        success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
-        print(f"[ENCODER _execute_job] ffmpeg.run_encoding() completed")
-        print(
-            f"[ENCODER _execute_job] ffmpeg.run_encoding returned: success={success}, error={error}"
-        )
+                hw_stats = self.hw_monitor.get_stats()
+                self.realtime_monitor.update_hw_stats(
+                    {
+                        "gpu_util": hw_stats.gpu_util,
+                        "gpu_temperature": hw_stats.gpu_temperature,
+                        "gpu_memory_used": hw_stats.gpu_memory_used,
+                        "gpu_memory_total": hw_stats.gpu_memory_total,
+                        "cpu_util": hw_stats.cpu_util,
+                    }
+                )
 
-        if success:
-            self.realtime_monitor.add_debug_log("Encoding completado com sucesso")
-        else:
-            self.realtime_monitor.add_debug_log(f"Erro no encoding: {error}")
+                if "progress" in stats:
+                    job.progress = stats["progress"]
+                    for callback in self._progress_callbacks:
+                        callback(job.id, stats["progress"])
 
-        # Antes de parar o monitor, garantir que o progresso está completo
-        if success:
-            self.realtime_monitor.update_progress(100.0)
+                if stats:
+                    for callback in self._encoding_stats_callbacks:
+                        callback(job.id, stats)
 
-        self.realtime_monitor.stop()
+                if hasattr(self.ffmpeg, "_process") and self.ffmpeg._process:
+                    ffmpeg_pid = self.ffmpeg._process.pid
+                    try:
+                        if hasattr(self, "_queue_manager"):
+                            queue_job = self._queue_manager.get_job(job.id)
+                            if queue_job and hasattr(queue_job, "ffmpeg_pid"):
+                                queue_job.ffmpeg_pid = ffmpeg_pid
+                                self._queue_manager.save()
+                    except:
+                        print(
+                            f"Aviso: Não foi possível atualizar o PID do FFMPEG no job {job.id}"
+                        )
 
-        return (success, error)
+            self.realtime_monitor.add_debug_log("Executando encoding...")
+            print(f"[ENCODER _execute_job] About to call ffmpeg.run_encoding()")
+            success, error = self.ffmpeg.run_encoding(
+                command, callback=progress_callback
+            )
+            print(f"[ENCODER _execute_job] ffmpeg.run_encoding() completed")
+            print(
+                f"[ENCODER _execute_job] ffmpeg.run_encoding returned: success={success}, error={error}"
+            )
+
+            if success:
+                self.realtime_monitor.add_debug_log("Encoding completado com sucesso")
+            else:
+                self.realtime_monitor.add_debug_log(f"Erro no encoding: {error}")
+
+            if success:
+                self.realtime_monitor.update_progress(100.0)
+
+            self.realtime_monitor.stop()
+
+            return (success, error)
+        except Exception as e:
+            print(f"[ENCODER _execute_job] Outer exception caught: {e}")
+            return (False, str(e))
 
     def set_pause(self, paused: bool):
         """Pausa ou retoma todos os jobs."""
