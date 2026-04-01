@@ -156,12 +156,12 @@ class QueueMenuUI:
         
         running_jobs = self.job_mgr.get_running_jobs()
         
-        print(f"[DEBUG show_submenu] Jobs em execução detectados: {len(running_jobs) if running_jobs else 0}")
+        self.console.print(f"[yellow][DEBUG show_submenu] Jobs em execução detectados: {len(running_jobs) if running_jobs else 0}[/yellow]")
         
         if running_jobs:
-            print(f"[DEBUG] Chamando _show_live_monitor_for_existing_jobs()...")
+            self.console.print(f"[yellow][DEBUG] Chamando _show_live_monitor_for_existing_jobs()...[/yellow]")
             self._show_live_monitor_for_existing_jobs()
-            print(f"[DEBUG] Retornou de _show_live_monitor_for_existing_jobs()")
+            self.console.print(f"[yellow][DEBUG] Retornou de _show_live_monitor_for_existing_jobs()[/yellow]")
         
         while True:
             self.menu.clear()
@@ -850,7 +850,7 @@ class QueueMenuUI:
     
     def _show_live_monitor_for_existing_jobs(self):
         """Mostra monitor em tempo real para jobs já em execução."""
-        print(f"[DEBUG _show_live_monitor] Método chamado!")
+        self.console.print(f"[yellow][DEBUG _show_live_monitor] Método chamado![/yellow]")
         
         try:
             from ..core.encoder_engine import EncoderEngine, EncodingJob, EncodingStatus
@@ -867,10 +867,10 @@ class QueueMenuUI:
         self.console.print("[bold cyan]Verificando jobs em execução...[/bold cyan]\n")
         
         running_jobs = self.job_mgr.get_running_jobs()
-        print(f"[DEBUG _show_live_monitor] Jobs encontrados: {len(running_jobs) if running_jobs else 0}")
+        self.console.print(f"[yellow][DEBUG _show_live_monitor] Jobs encontrados: {len(running_jobs) if running_jobs else 0}[/yellow]")
         
         if not running_jobs:
-            print(f"[DEBUG _show_live_monitor] Retornando pois não há jobs")
+            self.console.print(f"[yellow][DEBUG _show_live_monitor] Retornando pois não há jobs[/yellow]")
             return
         
         self.console.print(f"[green]Encontrados {len(running_jobs)} job(s) em execução[/green]\n")
@@ -882,7 +882,7 @@ class QueueMenuUI:
             self.console.print()
         
         if self.menu.ask_confirm("Deseja monitorar o progresso destes jobs?", default=True):
-            print(f"[DEBUG _show_live_monitor] Usuário confirmou monitoramento")
+            self.console.print(f"[yellow][DEBUG _show_live_monitor] Usuário confirmou monitoramento[/yellow]")
             encoder = EncoderEngine(max_concurrent=1)
             hw_monitor = HardwareMonitor()
             
@@ -945,5 +945,7 @@ class QueueMenuUI:
 
 def show_queue_submenu(menu: Menu, queue_mgr: QueueManager, job_mgr: JobManager):
     """Função helper para exibir submenu de fila."""
-    ui = QueueMenuUI(Console(), queue_mgr, job_mgr)
+    console = Console()
+    console.print("[yellow][DEBUG show_queue_submenu] Função chamada![/yellow]")
+    ui = QueueMenuUI(console, queue_mgr, job_mgr)
     ui.show_submenu()
