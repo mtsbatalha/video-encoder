@@ -1308,3 +1308,86 @@ class UnifiedQueueManager:
                 jobs = [job.to_dict() for job in self._jobs.values()]
             
             return jobs
+    
+    def create_job(
+        self,
+        input_path: str,
+        output_path: str,
+        profile_id: str,
+        profile_name: str
+    ) -> str:
+        """
+        Cria um novo job (compatibilidade com JobManager).
+        
+        Este método mantém compatibilidade com o antigo JobManager.create_job,
+        que recebia profile_id e profile_name separadamente.
+        
+        Args:
+            input_path: Caminho do arquivo de entrada
+            output_path: Caminho do arquivo de saída
+            profile_id: ID do perfil de encoding
+            profile_name: Nome do perfil de encoding
+        
+        Returns:
+            str: ID do job criado
+        """
+        # Construir objeto de perfil a partir dos parâmetros
+        profile = {
+            'id': profile_id,
+            'name': profile_name
+        }
+        
+        # Usar add_job para criar o job
+        job = self.add_job(
+            input_path=input_path,
+            output_path=output_path,
+            profile=profile,
+            priority=QueuePriority.NORMAL
+        )
+        
+        return job.id
+    
+    def add_to_queue(
+        self,
+        job_id: str,
+        input_path: str,
+        output_path: str,
+        profile: Dict[str, Any],
+        priority: QueuePriority = QueuePriority.NORMAL
+    ) -> int:
+        """
+        Adiciona job à fila (compatibilidade com QueueManager).
+        
+        NOTA: No UnifiedQueueManager, este método é redundante quando usado
+        após create_job(), pois add_job() já adiciona o job à fila.
+        Este método existe apenas para compatibilidade com código antigo.
+        
+        Args:
+            job_id: ID do job (ignorado, pois job já foi criado)
+            input_path: Caminho do arquivo de entrada (ignorado)
+            output_path: Caminho do arquivo de saída (ignorado)
+            profile: Configurações do perfil (ignorado)
+            priority: Prioridade do job (pode atualizar se diferente)
+        
+        Returns:
+            int: Posição do job na fila (1-based)
+        """
+        with self._lock:
+            # Verificar se job existe
+            if job_id not in self._jobs:
+                # Job não existe, não fazer nada
+                return 0
+            
+            # Atualizar prioridade se fornecida
+            job = self._jobs[job_id]
+            if priority and job.priority != priority.value:
+                job.priority = priority.value
+                self._sort_queue_by_priority()
+                self.save()
+            
+            # Retornar posição na fila (1-based)
+            try:
+                position = self._queue_order.index(job_id) + 1
+                return position
+            except ValueError:
+                return 0
