@@ -97,8 +97,12 @@ class WatchFolderMonitor:
 
     def _monitor_loop(self) -> None:
         """Loop principal de monitoramento."""
+        self.logger.info(f">>> MONITOR LOOP INICIADO para {self.watch_path}")
         while not self._stop_event.wait(self.interval):  # Aguarda intervalo ou stop
             try:
+                self.logger.info(
+                    f"Verificando arquivos em {self.watch_path} (intervalo: {self.interval}s)"
+                )
                 self._check_for_new_files()
             except Exception as e:
                 self.logger.error(f"Erro no monitoramento de {self.watch_path}: {e}")
@@ -106,19 +110,32 @@ class WatchFolderMonitor:
     def _check_for_new_files(self) -> None:
         """Verifica por novos arquivos na pasta."""
         if not self.watch_path.exists():
+            self.logger.warning(f"Caminho não existe: {self.watch_path}")
             return
 
         try:
             # Busca arquivos com extensões suportadas
             found_files = []
             for ext in self.extensions:
-                found_files.extend(self.watch_path.rglob(f"*{ext}"))
+                files = list(self.watch_path.rglob(f"*{ext}"))
+                found_files.extend(files)
+                if files:
+                    self.logger.info(
+                        f"Encontrados {len(files)} arquivos com extensão {ext}"
+                    )
+
+            self.logger.info(f"Total de arquivos encontrados: {len(found_files)}")
 
             # Processa cada arquivo encontrado
             for file_path in found_files:
                 try:
-                    if self._should_process_file(file_path):
+                    should_process = self._should_process_file(file_path)
+                    self.logger.info(
+                        f"Arquivo {file_path.name}: should_process={should_process}"
+                    )
+                    if should_process:
                         if self._is_file_complete(file_path):
+                            self.logger.info(f">>> ENFILEIRANDO: {file_path}")
                             self._enqueue_file(file_path)
                             self._processed_files.add(str(file_path))
                         else:
@@ -235,6 +252,7 @@ class WatchFolderMonitor:
 
     def _enqueue_file(self, path: Path) -> None:
         """Adiciona arquivo à fila de encoding."""
+        self.logger.info(f">>> _enqueue_file() CHAMADO para {path}")
         try:
             # Gera caminho de saída
             output_path = self._get_output_path(path)

@@ -72,10 +72,17 @@ class RecurrentMonitorService:
         # Obter configurações de pastas recorrentes
         recurrent_folders = self.config_manager.get_recurrent_folders()
 
+        self.logger.info(
+            f"Total de pastas recorrentes configuradas: {len(recurrent_folders)}"
+        )
+
         started_monitors = {}
 
         for folder_id, folder_config in recurrent_folders.items():
             if folder_config.get("enabled", True):
+                self.logger.info(
+                    f"Processando pasta {folder_id}: enabled={folder_config.get('enabled', True)}"
+                )
                 try:
                     monitor = self._create_monitor(folder_id, folder_config)
                     if monitor:
@@ -108,6 +115,10 @@ class RecurrentMonitorService:
             Instância de WatchFolderMonitor ou None em caso de erro
         """
         try:
+            self.logger.info(f"Criando monitor para folder_id={folder_id}")
+            self.logger.info(
+                f"Configuração da pasta: path={folder_config.get('input_directory')}, output={folder_config.get('output_directory')}, profile={folder_config.get('profile_id')}"
+            )
             # Converter a configuração da pasta recorrente para o formato esperado pelo WatchFolderMonitor
             watch_config = {
                 "path": folder_config.get("input_directory"),  # Caminho de entrada
@@ -283,8 +294,16 @@ class RecurrentMonitorService:
         """Loop that pulls jobs from queue_manager and adds them to encoder."""
         from src.core.encoder_engine import EncodingJob
 
+        self.logger.info("=== QUEUE PROCESSOR LOOP INICIADO ===")
+        iteration = 0
         while self._queue_processor_running:
             try:
+                iteration += 1
+                if iteration % 10 == 0:  # Log every 10 iterations to reduce noise
+                    self.logger.info(
+                        f"Queue processor: iteration {iteration}, active={len(self.encoder.get_active_jobs()) if self.encoder else 0}, pending={len(self.encoder.get_pending_jobs()) if self.encoder else 0}"
+                    )
+
                 if self.encoder is not None and self.queue_manager is not None:
                     active_jobs = len(self.encoder.get_active_jobs())
                     pending_jobs = len(self.encoder.get_pending_jobs())
@@ -292,6 +311,9 @@ class RecurrentMonitorService:
                     if active_jobs + pending_jobs < self.encoder.max_concurrent:
                         next_job = self.queue_manager.pop_next_job()
                         if next_job:
+                            self.logger.info(
+                                f">>> JOB ENCONTRADO NA QUEUE: {next_job['job_id'][:8] if next_job.get('job_id') else 'NO_ID'} - {next_job.get('input_path', 'NO_PATH')}"
+                            )
                             encoding_job = EncodingJob(
                                 id=next_job["job_id"],
                                 input_path=next_job["input_path"],
@@ -302,6 +324,9 @@ class RecurrentMonitorService:
                             self.logger.info(
                                 f"Job {next_job['job_id'][:8]} adicionado ao encoder"
                             )
+                        else:
+                            if iteration % 10 == 0:
+                                self.logger.debug("Queue vazia, aguardando...")
             except Exception as e:
                 self.logger.error(f"Erro no queue processor: {e}")
 
@@ -309,9 +334,13 @@ class RecurrentMonitorService:
 
     def start(self) -> Dict[str, WatchFolderMonitor]:
         """Starts all monitors and the queue processor thread."""
+        self.logger.info("=== START() CHAMADO ===")
+        self.logger.info(f"Encoder configurado: {self.encoder is not None}")
         result = self.start_all_monitors()
+        self.logger.info(f"Monitores criados: {len(result)}")
 
         if self.encoder is not None:
+            self.logger.info("Iniciando encoder...")
             self.encoder.start()
             self._queue_processor_running = True
             self._queue_processor_thread = threading.Thread(
@@ -319,6 +348,10 @@ class RecurrentMonitorService:
             )
             self._queue_processor_thread.start()
             self.logger.info("Queue processor thread started")
+        else:
+            self.logger.warning(
+                "Encoder NÃO configurado - queue processor não será iniciado!"
+            )
 
         return result
 

@@ -780,6 +780,14 @@ class RecurrentFolderUI:
                     queue_manager=self.queue_manager,
                 )
 
+            self.menu.console.print(
+                f"[cyan][i][/cyan] EncoderEngine criado: {self._encoder is not None}"
+            )
+            if self._encoder:
+                self.menu.console.print(
+                    f"[cyan][i][/cyan] Encoder max_concurrent: {self._encoder.max_concurrent}"
+                )
+
             self._monitor_service = RecurrentMonitorService(
                 config_manager=self.config,
                 queue_manager=self.queue_manager,
@@ -789,6 +797,12 @@ class RecurrentFolderUI:
                 encoder=self._encoder,
             )
 
+            self.menu.console.print(
+                f"[cyan][i][/cyan] Iniciando RecurrentMonitorService com encoder: {self._encoder is not None}"
+            )
+            self.menu.console.print(
+                f"[cyan][i][/cyan] Pastas habilitadas: {len(enabled_folders)}"
+            )
             self._monitor_service.start()
 
             self.menu.print_success(
