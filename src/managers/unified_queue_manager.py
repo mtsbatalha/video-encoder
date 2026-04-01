@@ -1391,3 +1391,121 @@ class UnifiedQueueManager:
                 return position
             except ValueError:
                 return 0
+    
+    def pop_next_job(self) -> Optional[Dict[str, Any]]:
+        """
+        Retorna e remove o próximo job da fila (compatibilidade com QueueManager).
+        
+        Returns:
+            Dict com informações do próximo job ou None se fila vazia/pausada
+        """
+        with self._lock:
+            if self._paused or not self._queue_order:
+                return None
+            
+            # Encontrar próximo job que não está em execução
+            for job_id in self._queue_order:
+                job = self._jobs.get(job_id)
+                if job and job.status in [JobStatus.QUEUED.value, JobStatus.PENDING.value]:
+                    # Remover da fila
+                    self._queue_order.remove(job_id)
+                    self.save()
+                    
+                    # Retornar como dicionário para compatibilidade
+                    return {
+                        'job_id': job.id,
+                        'input_path': job.input_path,
+                        'output_path': job.output_path,
+                        'profile': job.profile,
+                        'priority': job.priority,
+                        'added_at': job.created_at,
+                        'started_at': job.started_at
+                    }
+            
+            return None
+    
+    def get_next_job(self) -> Optional[Dict[str, Any]]:
+        """
+        Retorna o próximo job da fila sem remover (compatibilidade com QueueManager).
+        
+        Returns:
+            Dict com informações do próximo job ou None se fila vazia/pausada
+        """
+        with self._lock:
+            if self._paused or not self._queue_order:
+                return None
+            
+            # Encontrar próximo job que não está em execução
+            for job_id in self._queue_order:
+                job = self._jobs.get(job_id)
+                if job and job.status in [JobStatus.QUEUED.value, JobStatus.PENDING.value]:
+                    # Retornar como dicionário para compatibilidade
+                    return {
+                        'job_id': job.id,
+                        'input_path': job.input_path,
+                        'output_path': job.output_path,
+                        'profile': job.profile,
+                        'priority': job.priority,
+                        'added_at': job.created_at,
+                        'started_at': job.started_at
+                    }
+            
+            return None
+    
+    def mark_job_started(self, job_id: str) -> bool:
+        """
+        Marca job como iniciado (compatibilidade com QueueManager).
+        
+        Args:
+            job_id: ID do job
+        
+        Returns:
+            bool: True se marcado com sucesso
+        """
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job:
+                return False
+            
+            job.started_at = datetime.now().isoformat()
+            self.save()
+            return True
+    
+    def remove_from_queue(self, job_id: str) -> bool:
+        """
+        Remove job da fila (compatibilidade com QueueManager).
+        
+        Args:
+            job_id: ID do job para remover
+        
+        Returns:
+            bool: True se removido com sucesso
+        """
+        return self.remove_job(job_id)
+    
+    def pause(self) -> bool:
+        """
+        Pausa a fila (compatibilidade com QueueManager).
+        
+        Returns:
+            bool: True se pausado com sucesso
+        """
+        return self.pause_queue()
+    
+    def resume(self) -> bool:
+        """
+        Retoma a fila (compatibilidade com QueueManager).
+        
+        Returns:
+            bool: True se retomado com sucesso
+        """
+        return self.resume_queue()
+    
+    def is_paused(self) -> bool:
+        """
+        Verifica se a fila está pausada (compatibilidade com QueueManager).
+        
+        Returns:
+            bool: True se pausada
+        """
+        return self.is_queue_paused()
