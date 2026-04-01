@@ -368,21 +368,21 @@ class EncoderEngine:
                 except:
                     # Se não for possível atualizar o PID no queue manager, registrar aviso
                     print(f"Aviso: Não foi possível atualizar o PID do FFMPEG no job {job.id}")
-            
-            self.realtime_monitor.add_debug_log("Executando encoding...")
-            success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
         
+        self.realtime_monitor.add_debug_log("Executando encoding...")
+        success, error = self.ffmpeg.run_encoding(command, callback=progress_callback)
+    
         if success:
             self.realtime_monitor.add_debug_log("Encoding completado com sucesso")
         else:
             self.realtime_monitor.add_debug_log(f"Erro no encoding: {error}")
-        
+    
         # Antes de parar o monitor, garantir que o progresso está completo
         if success:
             self.realtime_monitor.update_progress(100.0)
-        
+    
         self.realtime_monitor.stop()
-        
+    
         return (success, error)
     
     def set_pause(self, paused: bool):
