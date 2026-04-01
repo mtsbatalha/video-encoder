@@ -44,8 +44,8 @@ def check_debug_key(encoder: EncoderEngine):
             char = msvcrt.getwch()
             if char.lower() == 'd':
                 debug_enabled = encoder.toggle_debug()
-                status = "ativado" if debug_enabled else "desativado"
-                console.print(f"\n[cyan]Debug {status}![/cyan]")
+                # Adiciona log de sistema que será exibido no monitor quando debug estiver ativo
+                encoder.realtime_monitor._add_debug_log(f"Debug {'ativado' if debug_enabled else 'desativado'} via tecla D")
                 return True
     except ImportError:
         # Linux/Mac - requer configuração especial de terminal
@@ -62,8 +62,7 @@ def check_debug_key(encoder: EncoderEngine):
                     char = sys.stdin.read(1)
                     if char.lower() == 'd':
                         debug_enabled = encoder.toggle_debug()
-                        status = "ativado" if debug_enabled else "desativado"
-                        console.print(f"\n[cyan]Debug {status}![/cyan]")
+                        encoder.realtime_monitor._add_debug_log(f"Debug {'ativado' if debug_enabled else 'desativado'} via tecla D")
                         return True
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -500,30 +499,21 @@ def process_queue_cli(config: ConfigManager, job_mgr: JobManager, queue_mgr: Que
             running_count = len(encoder.get_active_jobs())
             pending_in_encoder = len(encoder.get_pending_jobs())
             queue_length = queue_mgr.get_queue_length()
-            
-            # 🔍 DEBUG LOG: Estado da fila
-            console.print(f"[dim]DEBUG: running={running_count}, pending_in_encoder={pending_in_encoder}, queue_length={queue_length}[/dim]")
 
             if (running_count + pending_in_encoder) < 1:
-                console.print(f"[dim]DEBUG: Tentando pegar próximo job da fila...[/dim]")
                 next_job = queue_mgr.pop_next_job()
                 if next_job:
-                    console.print(f"[dim]DEBUG: Job obtido: {next_job['job_id'][:8]}[/dim]")
                     encoding_job = EncodingJob(
                         id=next_job['job_id'],
                         input_path=next_job['input_path'],
                         output_path=next_job['output_path'],
                         profile=next_job['profile']
                     )
-                    console.print(f"[dim]DEBUG: Adicionando job ao encoder...[/dim]")
                     encoder.add_job(encoding_job)
                     console.print(f"[cyan]Iniciando job: {next_job['job_id'][:8]}[/cyan]")
-                else:
-                    console.print(f"[dim]DEBUG: Nenhum job na fila[/dim]")
 
             queue_empty = queue_mgr.get_queue_length() == 0
             if not running_count and not pending_in_encoder and queue_empty:
-                console.print(f"[dim]DEBUG: Todas as condições para parar foram atendidas - encerrando loop[/dim]")
                 break
 
             # Verifica se tecla 'D' foi pressionada para toggle de debug
@@ -806,17 +796,67 @@ def run_folder_mode(args, config: ConfigManager, profile_mgr: ProfileManager, jo
 
 
 def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager, job_mgr: JobManager, queue_mgr: QueueManager, stats_mgr: StatsManager):
-    """Novo workflow de conversão por pasta com scan recursivo e suporte multi-perfil."""
+    """Novo workflow de conversão por pasta com scan recursivo e suporte multi-perfil e diretórios remotos."""
     from src.managers.multi_profile_conversion_manager import MultiProfileConversionManager, NamingConvention
+    from src.ui.remote_connection_ui import RemoteConnectionUI
+    from src.managers.remote_directory_manager import RemoteDirectoryManager, CopyProgress
     
     menu = Menu(console)
-
-    input_folder = menu.ask("Pasta de entrada (input)")
-    valid, error = validate_directory_exists(input_folder)
-    if not valid:
-        menu.print_error(error)
-        input("\nPressione Enter para continuar...")
-        return
+    remote_ui = RemoteConnectionUI(console, config)
+    remote_manager = RemoteDirectoryManager(config)
+    
+    # Perguntar se diretório é local ou remoto
+    directory_type = remote_ui.ask_directory_type()
+    
+    temp_dir = None  # Para cleanup posterior
+    input_folder = ""
+    
+    if directory_type == "remote":
+        # Configurar conexão remota
+        protocol = remote_ui.ask_remote_protocol()
+        remote_path, connection_config = remote_ui.configure_remote_directory(protocol)
+        
+        if not remote_path:
+            menu.print_error("Configuração cancelada")
+            input("\nPressione Enter para continuar...")
+            return
+        
+        # Testar conexão
+        if not Confirm.ask("\nDeseja testar a conexão antes de prosseguir?", default=True):
+            success, msg = remote_manager.test_connection(remote_path, connection_config)
+            if not success:
+                menu.print_error(f"Falha na conexão: {msg}")
+                input("\nPressione Enter para continuar...")
+                return
+        
+        # Copiar arquivos para diretório temporário
+        menu.print_info("Copiando arquivos do diretório remoto para diretório temporário...")
+        
+        def on_progress(progress: CopyProgress):
+            remote_ui.show_copy_progress(progress)
+        
+        success, temp_dir, files = remote_manager.copy_directory_to_temp(
+            remote_path,
+            connection_config,
+            progress_callback=on_progress
+        )
+        
+        if not success:
+            menu.print_error(f"Erro ao copiar arquivos: {temp_dir}")
+            input("\nPressione Enter para continuar...")
+            return
+        
+        input_folder = temp_dir
+        menu.print_success(f"Arquivos copiados para: {temp_dir}")
+        menu.print_info(f"{len(files)} arquivo(s) de vídeo encontrados")
+    else:
+        # Diretório local
+        input_folder = menu.ask("Pasta de entrada (input)")
+        valid, error = validate_directory_exists(input_folder)
+        if not valid:
+            menu.print_error(error)
+            input("\nPressione Enter para continuar...")
+            return
 
     output_folder = menu.ask("Pasta de saída (output)")
     ensure_directory(output_folder)
@@ -1058,6 +1098,13 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
             console.print(f"[cyan]Legendas copiadas para os diretórios de saída[/cyan]")
             console.print()
             process_queue_cli(config, job_mgr, queue_mgr, stats_mgr)
+            
+            # Cleanup do diretório temporário se for diretório remoto
+            if directory_type == "remote" and temp_dir and remote_manager.should_auto_cleanup():
+                menu.print_info("Limpando diretório temporário...")
+                remote_manager.cleanup_temp(temp_dir)
+                menu.print_success("Diretório temporário removido")
+            
             break
 
         elif action_choice == 1:  # 📋 Adicionar à fila
@@ -1099,6 +1146,13 @@ def run_folder_conversion_cli(config: ConfigManager, profile_mgr: ProfileManager
             console.print()
             console.print(f"[cyan]Jobs na fila: {queue_mgr.get_queue_length()}[/cyan]")
             console.print("[dim]Use a opção 'Ver fila de jobs' no menu principal para gerenciar[/dim]")
+            
+            # Cleanup do diretório temporário se for diretório remoto
+            if directory_type == "remote" and temp_dir and remote_manager.should_auto_cleanup():
+                menu.print_info("Limpando diretório temporário...")
+                remote_manager.cleanup_temp(temp_dir)
+                menu.print_success("Diretório temporário removido")
+            
             input("\nPressione Enter para continuar...")
             break
 

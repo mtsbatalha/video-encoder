@@ -63,6 +63,7 @@ class RealTimeEncodingMonitor:
         self._progress: float = 0
         self._description: str = "Encoding"
         self._time_remaining: str = "--:--:--"
+        self._elapsed_time: str = "00:00:00"
         self._status: str = "Aguardando..."
         self._start_time: float = 0
         self._total_duration: float = 0
@@ -143,6 +144,12 @@ class RealTimeEncodingMonitor:
                     estimated_total = elapsed / (progress / 100)
                     remaining = estimated_total - elapsed
                     self._time_remaining = time.strftime('%H:%M:%S', time.gmtime(max(0, remaining)))
+                # Calcular tempo decorrido
+                self._elapsed_time = time.strftime('%H:%M:%S', time.gmtime(elapsed))
+            else:
+                # Calcular tempo decorrido mesmo sem informações de duração
+                elapsed = time.time() - self._start_time
+                self._elapsed_time = time.strftime('%H:%M:%S', time.gmtime(elapsed))
             
             # Quando o progresso atinge 100%, atualiza o status automaticamente
             if progress >= 100.0:
@@ -157,18 +164,11 @@ class RealTimeEncodingMonitor:
         """Atualiza estatísticas de encoding."""
         with self._lock:
             if fps is not None:
-                print(f"🎯 MONITOR: Recebeu FPS={fps}, atualizando de {self._encoding_stats['fps']} para {fps}")
                 self._encoding_stats['fps'] = fps
             if speed is not None:
-                print(f"🎯 MONITOR: Recebeu Speed={speed}x, atualizando de {self._encoding_stats['speed']} para {speed}")
                 self._encoding_stats['speed'] = speed
             if bitrate is not None:
-                print(f"🎯 MONITOR: Recebeu Bitrate={bitrate} Kbps, atualizando de {self._encoding_stats['bitrate']} para {bitrate}")
                 self._encoding_stats['bitrate'] = bitrate
-            
-            # Log do estado atual
-            if fps is not None or speed is not None or bitrate is not None:
-                print(f"📊 MONITOR: Estado atual - FPS={self._encoding_stats['fps']}, Speed={self._encoding_stats['speed']}x, Bitrate={self._encoding_stats['bitrate']} Kbps")
     
     def update_status(self, status: str):
         """Atualiza status."""
@@ -555,6 +555,7 @@ class RealTimeEncodingMonitor:
             encoding_table.add_row("Bitrate:", bitrate_val)
             encoding_table.add_row("Progresso:", f"{self._progress:.1f}%")
             encoding_table.add_row("Tempo Restante:", self._time_remaining)
+            encoding_table.add_row("Tempo Decorrido:", self._elapsed_time)
             
             # Barra de progresso
             progress_bar = self._generate_progress_bar(self._progress)
@@ -639,7 +640,7 @@ class RealTimeEncodingMonitor:
             return Panel(
                 Group(*renderables),
                 border_style="magenta",
-                title="🎬 NVENC Encoder - Tempo Real"
+                title="[NVENC] Encoder - Tempo Real"
             )
     
     def _generate_progress_bar(self, percent: float, width: int = 50) -> str:

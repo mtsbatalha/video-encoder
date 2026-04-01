@@ -4,6 +4,8 @@
 
 Esta funcionalidade permite ativar ou desativar logs de debug durante a conversão de vídeos pressionando a tecla **'D'**. Os logs são exibidos abaixo da tela de monitoramento em tempo real, mantendo a interface limpa quando o debug está desativado.
 
+**Importante:** Por padrão, o debug começa **DESATIVADO**. Pressione 'D' para ativar.
+
 ## Implementação
 
 ### Arquivos Modificados

@@ -342,10 +342,7 @@ class FFmpegWrapper:
         callback: Optional[Callable[[str], None]] = None
     ) -> tuple[bool, str]:
         """Executa comando de encoding."""
-        print(f"🔍 DEBUG: FFmpegWrapper.run_encoding chamado")
-        print(f"🔍 DEBUG: Comando completo: {' '.join(command)}")
         try:
-            print(f"🔍 DEBUG: Criando subprocess...")
             import os
             import sys
             # ✅ FIX: No Windows/WSL, define variável ambiente para forçar line buffering
@@ -362,7 +359,6 @@ class FFmpegWrapper:
                 universal_newlines=False,
                 env=env
             )
-            print(f"🔍 DEBUG: Subprocess criado com PID: {self._process.pid}")
             
             # ✅ FIX CRÍTICO: Tornar stdout não-bloqueante (Linux/WSL)
             if sys.platform != 'win32' and self._process.stdout:
@@ -371,9 +367,6 @@ class FFmpegWrapper:
                 fd = self._process.stdout.fileno()
                 flags = fcntl.fcntl(fd, fcntl.F_GETFL)
                 fcntl.fcntl(fd, fcntl.F_SETFL, flags | os_module.O_NONBLOCK)
-                print(f"🔍 DEBUG: stdout configurado como NÃO-BLOQUEANTE")
-            
-            print(f"🔍 DEBUG: stdin=DEVNULL, stdout=PIPE (non-blocking), stderr=STDOUT")
             
             output_lines = []
             import time as time_module
@@ -382,19 +375,14 @@ class FFmpegWrapper:
             last_output_time = start_time
             max_idle_seconds = 300  # 5 minutos sem saída = possível hang
             
-            print(f"🔍 DEBUG: Entrando no loop principal de leitura...")
             # Loop principal de leitura da saída do FFmpeg
             loop_iteration = 0
             while True:
                 loop_iteration += 1
-                if loop_iteration % 10 == 0:  # Log a cada 10 iterações
-                    print(f"🔍 DEBUG: Loop iteration {loop_iteration}, processo ainda rodando")
                 
                 # Verifica se o processo terminou
                 poll_result = self._process.poll()
-                print(f"🔍 DEBUG: poll_result = {poll_result}")
                 if poll_result is not None:
-                    print(f"🔍 DEBUG: Processo terminou detectado! returncode = {poll_result}")
                     # Processo terminou - lê qualquer saída restante
                     if self._process.stdout:
                         remaining = self._process.stdout.read()
@@ -432,7 +420,7 @@ class FFmpegWrapper:
                                                 callback.progress_line_count = 0
                                             callback.progress_line_count += 1
                                             if callback.progress_line_count <= 5 or callback.progress_line_count % 15 == 0:
-                                                print(f"🔄 FFMPEG: Enviando linha #{callback.progress_line_count} para callback: {repr(line[:120])}")
+                                                pass  # Debug log removido
                                         callback(line)
                         else:
                             # Sem dados disponíveis, aguarda um pouco
@@ -441,16 +429,13 @@ class FFmpegWrapper:
                         # Normal em non-blocking I/O quando não há dados
                         time_module.sleep(0.1)
                     except Exception as e:
-                        print(f"⚠️ Erro ao ler stdout: {type(e).__name__}: {e}")
                         time_module.sleep(0.1)
                 
                 # Verifica timeout de inatividade (processo pode estar travado)
                 idle_time = time_module.time() - last_output_time
                 if idle_time > max_idle_seconds:
-                    print(f"⚠️ DEBUG: Processo inativo por {idle_time:.0f}s. Verificando status...")
                     # Verifica novamente se o processo terminou
                     if self._process.poll() is not None:
-                        print(f"🔍 DEBUG: Processo terminou durante período de inatividade")
                         break
                     # Se ainda rodando, continua aguardando (não quebra o loop)
                     last_output_time = time_module.time()  # Reseta timer para evitar loop infinito de warnings
@@ -459,19 +444,13 @@ class FFmpegWrapper:
             returncode = self._process.wait(timeout=5)
             self._process = None
             
-            print(f"🔍 DEBUG: FFmpeg processo finalizado com returncode: {returncode}")
-            
             if returncode == 0:
-                print(f"✅ DEBUG: Encoding completado com sucesso")
                 return (True, 'Encoding completed successfully')
             else:
                 error_msg = '\n'.join(output_lines[-20:])
-                print(f"❌ DEBUG: Encoding falhou. Últimas linhas de erro:")
-                print(error_msg)
                 return (False, error_msg)
                 
         except subprocess.TimeoutExpired:
-            print(f"❌ DEBUG: Timeout no processo FFmpeg")
             if self._process:
                 self._process.terminate()
                 try:
@@ -481,9 +460,6 @@ class FFmpegWrapper:
             self._process = None
             return (False, 'Encoding timeout')
         except Exception as e:
-            print(f"❌ DEBUG: Exceção capturada no run_encoding: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
             if self._process:
                 try:
                     self._process.terminate()

@@ -21,6 +21,8 @@ def check_debug_key(encoder):
             char = msvcrt.getwch()
             if char.lower() == 'd':
                 debug_enabled = encoder.toggle_debug()
+                # Adiciona log de sistema que será exibido no monitor quando debug estiver ativo
+                encoder.realtime_monitor._add_debug_log(f"Debug {'ativado' if debug_enabled else 'desativado'} via tecla D")
                 return True
     except ImportError:
         # Linux/Mac
@@ -36,7 +38,8 @@ def check_debug_key(encoder):
                 if select.select([sys.stdin], [], [], 0)[0]:
                     char = sys.stdin.read(1)
                     if char.lower() == 'd':
-                        encoder.toggle_debug()
+                        debug_enabled = encoder.toggle_debug()
+                        encoder.realtime_monitor._add_debug_log(f"Debug {'ativado' if debug_enabled else 'desativado'} via tecla D")
                         return True
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)

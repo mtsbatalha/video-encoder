@@ -23,7 +23,10 @@ class ConfigManager:
             "profiles": "profiles",
             "jobs": "jobs",
             "logs": "logs",
-            "stats": "stats"
+            "stats": "stats",
+            "temp_base": None,
+            "auto_cleanup": True,
+            "min_disk_space_gb": 50
         },
         "encoding": {
             "max_concurrent": 2,
@@ -66,7 +69,10 @@ class ConfigManager:
             "backup_count": 5,
             "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         },
-        "recurrent_folders": []
+        "recurrent_folders": [],
+        "remote_connections": {
+            "saved_connections": []
+        }
     }
     
     def __init__(self, config_path: Optional[str] = None):
@@ -200,3 +206,84 @@ class ConfigManager:
                 self.set('recurrent_folders', folders)
                 return self.save()
         return False
+    
+    # Remote Connections Methods
+    
+    def get_remote_connections(self) -> Dict[str, Any]:
+        """Retorna configurações de conexões remotas."""
+        return self.get('remote_connections', {'saved_connections': []})
+    
+    def get_saved_connections(self) -> List[Dict[str, Any]]:
+        """Retorna lista de conexões remotas salvas."""
+        return self.get('remote_connections.saved_connections', [])
+    
+    def add_saved_connection(self, connection: Dict[str, Any]) -> bool:
+        """Adiciona uma nova conexão remota salva."""
+        # Gera ID único se não fornecido
+        if 'id' not in connection:
+            connection['id'] = self._generate_uuid()
+        
+        # Define valores padrão se não fornecidos
+        if 'created_at' not in connection:
+            connection['created_at'] = datetime.now().isoformat() + 'Z'
+        
+        connections = self.get_saved_connections()
+        connections.append(connection)
+        self.set('remote_connections.saved_connections', connections)
+        return self.save()
+    
+    def remove_saved_connection(self, connection_id: str) -> bool:
+        """Remove conexão remota salva por ID."""
+        connections = self.get_saved_connections()
+        for i, conn in enumerate(connections):
+            if conn.get('id') == connection_id:
+                connections.pop(i)
+                self.set('remote_connections.saved_connections', connections)
+                return self.save()
+        return False
+    
+    def update_saved_connection(self, connection_id: str, updates: Dict[str, Any]) -> bool:
+        """Atualiza conexão remota salva por ID."""
+        connections = self.get_saved_connections()
+        for i, conn in enumerate(connections):
+            if conn.get('id') == connection_id:
+                # Atualiza apenas os campos fornecidos, mantendo os outros intactos
+                updated_conn = {**conn, **updates}
+                connections[i] = updated_conn
+                self.set('remote_connections.saved_connections', connections)
+                return self.save()
+        return False
+    
+    def get_saved_connection(self, connection_id: str) -> Optional[Dict[str, Any]]:
+        """Obtém uma conexão remota salva específica por ID."""
+        connections = self.get_saved_connections()
+        for conn in connections:
+            if conn.get('id') == connection_id:
+                return conn
+        return None
+    
+    # Directory Settings Methods
+    
+    def get_temp_base(self) -> Optional[str]:
+        """Retorna diretório base para arquivos temporários."""
+        return self.get('directories.temp_base')
+    
+    def set_temp_base(self, path: str) -> bool:
+        """Define diretório base para arquivos temporários."""
+        return self.set('directories.temp_base', path)
+    
+    def get_auto_cleanup(self) -> bool:
+        """Retorna se cleanup automático está habilitado."""
+        return self.get('directories.auto_cleanup', True)
+    
+    def set_auto_cleanup(self, enabled: bool) -> bool:
+        """Define se cleanup automático está habilitado."""
+        return self.set('directories.auto_cleanup', enabled)
+    
+    def get_min_disk_space_gb(self) -> int:
+        """Retorna espaço mínimo em disco requerido em GB."""
+        return self.get('directories.min_disk_space_gb', 50)
+    
+    def set_min_disk_space_gb(self, gb: int) -> bool:
+        """Define espaço mínimo em disco requerido em GB."""
+        return self.set('directories.min_disk_space_gb', gb)
